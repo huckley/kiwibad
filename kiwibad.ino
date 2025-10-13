@@ -1,46 +1,55 @@
+#include "Arduino.h"
 #include "LoRaWan_APP.h"
-// #include "Arduino.h"
 #include <OneWire.h>
 #include <DallasTemperature.h>
 #include "HT_lCMEN2R13EFC1.h"
+#include <driver/gpio.h>
+#include <driver/rtc_io.h>
+#include <HardwareSerial.h>
 #include "HT_E0213A367.h"
-#include "font.h"
+#include "driver/board-config.h"
+#include "Monospaced_bold_50.h"
 #include "battery.h"
 
-#define ONE_WIRE_BUS 38  // Pin an dem der DS18B20 hängt
+
+#define ONE_WIRE_BUS 38 // Pin an dem der DS18B20 hängt
 
 OneWire oneWire(ONE_WIRE_BUS);
 DallasTemperature sensors(&oneWire);
 
 DeviceAddress sensorAddress;
 
-// Initialize the display
-ScreenDisplay *display;
-
-int width, height;
-int x = 0;
-int y = 0;
-
+#define Resolution 0.000244140625 
+#define battary_in 3.3
+#define coefficient 5.30624798087485
+#define LED  45
+#define BAUD 9600
 #define PIN_EINK_SCLK 4
 #define PIN_EINK_DC   2
 #define PIN_EINK_CS   5
 #define PIN_EINK_RES  3
 #define PIN_EINK_MOSI 6
 
-#define DIRECTION ANGLE_0_DEGREE
-#define Resolution 0.000244140625 
-#define battary_in 3.3
-#define coefficient 1.03
+
+ScreenDisplay *display;
 
 void VextON(void)
 {
-  pinMode(18, OUTPUT);
+  pinMode(18,OUTPUT);
   digitalWrite(18, HIGH);
+  pinMode(46,OUTPUT);
+  digitalWrite(46, HIGH);
+}
+
+void VextOFF(void) //Vext default OFF
+{
+  pinMode(18,OUTPUT);
+  digitalWrite(18, LOW);
+  pinMode(46,OUTPUT);
+  digitalWrite(46, LOW);
 }
 
 void init_display () {
-  VextON();
-  delay(100);
   pinMode(PIN_EINK_SCLK, OUTPUT); 
   pinMode(PIN_EINK_DC, OUTPUT); 
   pinMode(PIN_EINK_CS, OUTPUT);
@@ -60,13 +69,13 @@ void init_display () {
   pinMode(PIN_EINK_MOSI, OUTPUT);  
   digitalWrite(PIN_EINK_SCLK, LOW);
   for (int i = 0; i < 8; i++) {
-        digitalWrite(PIN_EINK_MOSI, (cmd & 0x80) ? HIGH : LOW);
-        cmd <<= 1;
-        digitalWrite(PIN_EINK_SCLK, HIGH);
-        delayMicroseconds(1);
-        digitalWrite(PIN_EINK_SCLK, LOW);
-        delayMicroseconds(1);
-    }
+    digitalWrite(PIN_EINK_MOSI, (cmd & 0x80) ? HIGH : LOW);
+    cmd <<= 1;
+    digitalWrite(PIN_EINK_SCLK, HIGH);
+    delayMicroseconds(1);
+    digitalWrite(PIN_EINK_SCLK, LOW);
+    delayMicroseconds(1);
+  }
   delay(10);
 
   digitalWrite(PIN_EINK_DC, HIGH);
@@ -75,34 +84,25 @@ void init_display () {
   // read chip ID
   uint8_t chipId = 0;
   for (int8_t b = 7; b >= 0; b--) {
-      digitalWrite(PIN_EINK_SCLK, LOW);  
-      delayMicroseconds(1);
-      digitalWrite(PIN_EINK_SCLK, HIGH);
-      delayMicroseconds(1);
-      if (digitalRead(PIN_EINK_MOSI)) chipId |= (1 << b);  
+    digitalWrite(PIN_EINK_SCLK, LOW);  
+    delayMicroseconds(1);
+    digitalWrite(PIN_EINK_SCLK, HIGH);
+    delayMicroseconds(1);
+    if (digitalRead(PIN_EINK_MOSI)) chipId |= (1 << b);  
   }
   digitalWrite(PIN_EINK_CS, HIGH);
   if((chipId &0x03) !=0x01) {
-      display = new HT_ICMEN2R13EFC1(3, 2, 5, 1, 4, 6, -1, 6000000); // rst,dc,cs,busy,sck,mosi,miso,frequency
-  } 
-  else
-  {
-      display = new HT_E0213A367(3, 2, 5, 1, 4, 6, -1, 6000000); // rst,dc,cs,busy,sck,mosi,miso,frequency
+    display = new HT_ICMEN2R13EFC1(3, 2, 5, 1, 4, 6, -1, 6000000); // rst,dc,cs,busy,sck,mosi,miso,frequency
+  } else {
+    display = new HT_E0213A367(3, 2, 5, 1, 4, 6, -1, 6000000); // rst,dc,cs,busy,sck,mosi,miso,frequency
   }
-  if (DIRECTION == ANGLE_0_DEGREE || DIRECTION == ANGLE_180_DEGREE) {
-    width = 250;
-    height = 122;
-  }
-  else
-  {
-    width = 122;
-    height = 250;
-  }
-  // Initialising the UI will init the display too.
   display->init();
-  display->screenRotate(DIRECTION);
+  //display->screenRotate(DIRECTION);
   display->setFont(ArialMT_Plain_10);
-  display->setTextAlignment(TEXT_ALIGN_LEFT);  
+  display->setTextAlignment(TEXT_ALIGN_LEFT);
+  Mcu.begin(HELTEC_BOARD,SLOW_CLK_TPYE);
+  analogSetAttenuation(ADC_11db);
+  analogReadResolution(12);
 }
 
 
@@ -115,36 +115,45 @@ void Navigation_bar() {
 }
 
 void battery()
-{
-    analogReadResolution(12);
-    int battery_levl = analogRead(7)* Resolution * battary_in * coefficient;//battary/4096*3.3*coefficient
-    float battery_one = 0.4125;
-    Serial.printf("ADC analog value = %.2f\n", battery_levl );
-    if (battery_levl < battery_one) {
-      display->drawString(230, 0, "N/A");
-      display->drawXbm(215, 0, battery_w, battery_h, battery0);
-    }
-    else if (battery_levl < 2 * battery_one && battery_levl > battery_one) {
-      display->drawXbm(230, 0, battery_w, battery_h, battery1);
-    }
-    else if (battery_levl < 3 * battery_one && battery_levl > 2 * battery_one) {
-      display->drawXbm(230, 0, battery_w, battery_h, battery2);
-    }
-    else if (battery_levl < 4 * battery_one && battery_levl > 3 * battery_one) {
-      display->drawXbm(230, 0, battery_w, battery_h, battery3);
-    }
-    else if (battery_levl < 5 * battery_one && battery_levl > 4 * battery_one) {
-      display->drawXbm(230, 0, battery_w, battery_h, battery4);
-    }
-    else if (battery_levl < 6 * battery_one && battery_levl > 5 * battery_one) {
-      display->drawXbm(230, 0, battery_w, battery_h, battery5);
-    }
-    else if (battery_levl < 7 * battery_one && battery_levl > 6 * battery_one) {
-      display->drawXbm(230, 0, battery_w, battery_h, battery6);
-    }
-    else if (battery_levl < 7 * battery_one && battery_levl > 6 * battery_one) {
-      display->drawXbm(230, 0, battery_w, battery_h, batteryfull);
-    }
+{   
+    int rawADC = analogRead(7);
+    float batteryVoltage = rawADC * Resolution * battary_in * coefficient;//battary/4096*3.3*coefficient
+    // Battery percentage
+    float batteryMin = 3.0;
+    float batteryMax = 4.2;
+    float batteryPercent = ((batteryVoltage - batteryMin) / (batteryMax - batteryMin)) * 100.0;
+    batteryPercent = constrain(batteryPercent, 0, 100);
+    Serial.printf("Raw ADC: %d | Voltage: %.3f | %.0f%%\n", rawADC, batteryVoltage, batteryPercent);
+    String msg = "Raw ADC: " + String(rawADC);
+      msg += " | Voltage: " + String(batteryVoltage, 3);
+      msg += " | " + String(batteryPercent, 0) + "%";  
+    display->drawString(0, 100, msg);
+
+    float battery_one = 12.5;
+  if (batteryPercent < battery_one) {
+    display->drawXbm(230, 0, battery_w, battery_h, battery0);
+  }
+  else if (batteryPercent < 2 * battery_one) {
+    display->drawXbm(230, 0, battery_w, battery_h, battery1);
+  }
+  else if (batteryPercent < 3 * battery_one) {
+    display->drawXbm(230, 0, battery_w, battery_h, battery2);
+  }
+  else if (batteryPercent < 4 * battery_one) {
+    display->drawXbm(230, 0, battery_w, battery_h, battery3);
+  }
+  else if (batteryPercent < 5 * battery_one) {
+    display->drawXbm(230, 0, battery_w, battery_h, battery4);
+  }
+  else if (batteryPercent < 6 * battery_one) {
+    display->drawXbm(230, 0, battery_w, battery_h, battery5);
+  }
+  else if (batteryPercent < 7 * battery_one) {
+    display->drawXbm(230, 0, battery_w, battery_h, battery6);
+  }
+  else {
+    display->drawXbm(230, 0, battery_w, battery_h, batteryfull);
+  }
 }
 
 void update_display() {
@@ -154,9 +163,8 @@ void update_display() {
 
 void setup() {
   Serial.begin(115200);
-  pinMode(18, OUTPUT);
-  digitalWrite(18, HIGH);
- 
+  VextON();
+
   Serial.println("DS18B20 Test");
   init_display();
   display->clear();
@@ -211,9 +219,9 @@ void loop() {
 
   display->setTextAlignment(TEXT_ALIGN_LEFT);
 //  display->setTextAlignment(TEXT_ALIGN_CENTER);
-  x = width / 2;
-  y = height / 2+1;
-  display->setFont(Dialog_plain_55);
+//  x = width / 2;
+//  y = height / 2+1;
+  display->setFont(Monospaced_bold_50);
   display->drawString(0, 15, "-17°C");
   update_display();
 }
