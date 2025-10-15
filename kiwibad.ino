@@ -11,13 +11,15 @@
 #include "Monospaced_bold_50.h"
 #include "battery.h"
 
-
-#define ONE_WIRE_BUS 38 // Pin an dem der DS18B20 hängt
+#define ONE_WIRE_BUS 17 // Pin an dem der DS18B20 hängt
+#define TEMPERATURE_PRECISION 9
 
 OneWire oneWire(ONE_WIRE_BUS);
 DallasTemperature sensors(&oneWire);
 
-DeviceAddress sensorAddress;
+#define MAX_SENSORS 10
+DeviceAddress sensorAddresses[MAX_SENSORS];
+int deviceCount = 0;
 
 #define Resolution 0.000244140625 
 #define battary_in 3.3
@@ -29,7 +31,8 @@ DeviceAddress sensorAddress;
 #define PIN_EINK_CS   5
 #define PIN_EINK_RES  3
 #define PIN_EINK_MOSI 6
-
+DeviceAddress air_sensor_addr   = { 0x28, 0xCE, 0xC8, 0x37, 0x00, 0x00, 0x00, 0x40 };
+DeviceAddress water_sensor_addr = { 0x28, 0xD7, 0xB9, 0xB3, 0x00, 0x00, 0x00, 0xFA };
 
 ScreenDisplay *display;
 
@@ -97,7 +100,6 @@ void init_display () {
     display = new HT_E0213A367(3, 2, 5, 1, 4, 6, -1, 6000000); // rst,dc,cs,busy,sck,mosi,miso,frequency
   }
   display->init();
-  //display->screenRotate(DIRECTION);
   display->setFont(ArialMT_Plain_10);
   display->setTextAlignment(TEXT_ALIGN_LEFT);
   Mcu.begin(HELTEC_BOARD,SLOW_CLK_TPYE);
@@ -107,29 +109,30 @@ void init_display () {
 
 
 void Navigation_bar() {
+  struct tm timeinfo;
+  getLocalTime(&timeinfo);
+  float airtempC = sensors.getTempC(air_sensor_addr);
+  char buffer[32];
+  strftime(buffer, sizeof(buffer), "%H:%M:%S  %d.%m.%Y", &timeinfo);
   display->setTextAlignment(TEXT_ALIGN_LEFT);
   display->setFont(ArialMT_Plain_10);
   display->drawLine(0, 15, 250, 15);
-  display->drawString(0, 0, "Luft: -17°C 11.10.25 20:11");
+  String line_one = "Luft: " + String(airtempC, 2) + "°C | " + buffer;
+  Serial.println(line_one);
+  display->drawString(0, 0, line_one);
   battery();
 }
 
-void battery()
-{   
-    int rawADC = analogRead(7);
-    float batteryVoltage = rawADC * Resolution * battary_in * coefficient;//battary/4096*3.3*coefficient
-    // Battery percentage
-    float batteryMin = 3.0;
-    float batteryMax = 4.2;
-    float batteryPercent = ((batteryVoltage - batteryMin) / (batteryMax - batteryMin)) * 100.0;
-    batteryPercent = constrain(batteryPercent, 0, 100);
-    Serial.printf("Raw ADC: %d | Voltage: %.3f | %.0f%%\n", rawADC, batteryVoltage, batteryPercent);
-    String msg = "Raw ADC: " + String(rawADC);
-      msg += " | Voltage: " + String(batteryVoltage, 3);
-      msg += " | " + String(batteryPercent, 0) + "%";  
-    display->drawString(0, 100, msg);
-
-    float battery_one = 12.5;
+void battery() {   
+  int rawADC = analogRead(7);
+  float batteryVoltage = rawADC * Resolution * battary_in * coefficient;//battary/4096*3.3*coefficient
+  // Battery percentage
+  float batteryMin = 3.0;
+  float batteryMax = 4.2;
+  float batteryPercent = ((batteryVoltage - batteryMin) / (batteryMax - batteryMin)) * 100.0;
+  batteryPercent = constrain(batteryPercent, 0, 100);
+  Serial.printf("Raw ADC: %d | Voltage: %.3f | %.0f%%\n", rawADC, batteryVoltage, batteryPercent);
+  float battery_one = 12.5;
   if (batteryPercent < battery_one) {
     display->drawXbm(230, 0, battery_w, battery_h, battery0);
   }
@@ -165,64 +168,59 @@ void setup() {
   Serial.begin(115200);
   VextON();
 
-  Serial.println("DS18B20 Test");
+  Serial.println("init >>> ");
   init_display();
-  display->clear();
-  display->drawString(9, 0, "init >>> ");
+  display->clear();  
+  display->drawString(0, 0, "init >>> ");
   update_display();
   sensors.begin();
 
-  int deviceCount = sensors.getDeviceCount();
+  deviceCount = sensors.getDeviceCount();
   Serial.print("Gefundene Sensoren: ");
-  display->drawString(0, 20, "Gefundene Sensoren: ");
   Serial.println(deviceCount);
-  display->drawString(150, 20, String(deviceCount));
+  display->drawString(0, 10, "Gefundene Sensoren: ");
+  display->drawString(110, 10, String(deviceCount));
 
-  if (!sensors.getAddress(sensorAddress, 0)) {
-    Serial.println("Kein Sensor gefunden!");
-    display->drawString(0, 40, "Kein Sensor gefunden!");
-    update_display();
-    return;
+  for (int i = 0; i < deviceCount && i < MAX_SENSORS; i++) {
+    if (sensors.getAddress(sensorAddresses[i], i)) {
+      Serial.print("Sensor ");
+      Serial.print(i);
+      Serial.print(" Adresse: ");
+      printAddress(sensorAddresses[i]);
+
+      sensors.setResolution(sensorAddresses[i], TEMPERATURE_PRECISION);
+
+      char addressStr[25];
+      sprintf(addressStr, "%02X%02X%02X%02X%02X%02X%02X%02X",
+        sensorAddresses[i][0], sensorAddresses[i][1],
+        sensorAddresses[i][2], sensorAddresses[i][3],
+        sensorAddresses[i][4], sensorAddresses[i][5],
+        sensorAddresses[i][6], sensorAddresses[i][7]);
+
+      int y = 20 + (i * 10);
+      display->drawString(0, y, "Sensor " + String(i));
+      display->drawString(110, y, addressStr);
+    } else {
+      Serial.println("Sensor " + String(i) + " hat keine gültige Adresse.");
+    }
   }
-
-  Serial.print("Sensor-Adresse: ");
-  display->drawString(0, 40, "Sensor-Adresse: ");
-  printAddress(sensorAddress);
-  char addressStr[25];
-  sprintf(addressStr, "%02X%02X%02X%02X%02X%02X%02X%02X",
-    sensorAddress[0], sensorAddress[1], sensorAddress[2], sensorAddress[3],
-    sensorAddress[4], sensorAddress[5], sensorAddress[6], sensorAddress[7]);  
-  display->drawString(150, 40, addressStr);
-  sensors.setResolution(sensorAddress, 12);
-  Serial.print("Auflösung: ");
-  display->drawString(0, 60, "Auflösung: ");
-  Serial.println(sensors.getResolution(sensorAddress));
-  display->drawString(150, 60, String(sensors.getResolution(sensorAddress)));
   update_display();
+  delay(2000);
 }
 
 void loop() {
+
   sensors.requestTemperatures();
-
-  float tempC = sensors.getTempC(sensorAddress);
-  if (tempC == DEVICE_DISCONNECTED_C) {
-    Serial.println("Fehler: Sensor nicht verbunden!");
-  } else {
-    Serial.print("Temperatur: ");
-    Serial.print(tempC);
-    Serial.println(" °C");
-  }
   display->clear();
-
-  delay(2000);
   Navigation_bar();
 
-  display->setTextAlignment(TEXT_ALIGN_LEFT);
-//  display->setTextAlignment(TEXT_ALIGN_CENTER);
-//  x = width / 2;
-//  y = height / 2+1;
+  display->setTextAlignment(TEXT_ALIGN_CENTER);
   display->setFont(Monospaced_bold_50);
-  display->drawString(0, 15, "-17°C");
+  float water_tempC = sensors.getTempC(water_sensor_addr);
+  String tempStr = String(water_tempC, 0) + "°C";
+  Serial.println(tempStr);
+  display->drawString(125, 40, tempStr);
+  delay(5000);
   update_display();
 }
 
