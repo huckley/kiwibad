@@ -45,11 +45,10 @@ DeviceAddress water_sensor_addr = { 0x28, 0xD7, 0xB9, 0xB3, 0x00, 0x00, 0x00, 0x
 #define LORA_FIX_LENGTH_PAYLOAD_ON false
 #define LORA_IQ_INVERSION_ON false
 #define BUFFER_SIZE 80              // Max buffer for outgoing message
-#define SLEEP_TIME 300              // Sleep time in secounds
+#define SLEEP_TIME 60              // Sleep time in secounds
 char txpacket[BUFFER_SIZE];         // Outgoing message buffer
 // LoRa event structure
 static RadioEvents_t RadioEvents;
-bool lora_idle=true;
 
 // Function prototypes for LoRa TX events
 void OnTxDone(void);
@@ -99,9 +98,6 @@ void enterDeepSleepForSecounds(uint32_t secounds) {
   // Prepare peripherals
   Radio.Sleep();         // Put LoRa radio to sleep
   SPI.end();             // End SPI to save power
-  pinMode(8, OUTPUT);
-  digitalWrite(8, HIGH);
-  rtc_gpio_hold_en(gpio_num_t(8));
 
   // Set other unused pins to analog to minimize leakage
   pinMode(14, ANALOG);
@@ -265,17 +261,11 @@ void setup() {
 
   Serial.println("init >>> ");
   init_display();
-  display->clear();  
-  display->drawString(0, 0, "init >>> ");
-  update_display();
   sensors.begin();
 
   deviceCount = sensors.getDeviceCount();
   Serial.print("Gefundene Sensoren: ");
   Serial.println(deviceCount);
-  display->drawString(0, 10, "Gefundene Sensoren: ");
-  display->drawString(110, 10, String(deviceCount));
-
   for (int i = 0; i < deviceCount && i < MAX_SENSORS; i++) {
     if (sensors.getAddress(sensorAddresses[i], i)) {
       Serial.print("Sensor ");
@@ -285,23 +275,10 @@ void setup() {
 
       sensors.setResolution(sensorAddresses[i], TEMPERATURE_PRECISION);
 
-      char addressStr[25];
-      sprintf(addressStr, "%02X%02X%02X%02X%02X%02X%02X%02X",
-        sensorAddresses[i][0], sensorAddresses[i][1],
-        sensorAddresses[i][2], sensorAddresses[i][3],
-        sensorAddresses[i][4], sensorAddresses[i][5],
-        sensorAddresses[i][6], sensorAddresses[i][7]);
-
-      int y = 20 + (i * 10);
-      display->drawString(0, y, "Sensor " + String(i));
-      display->drawString(110, y, addressStr);
     } else {
       Serial.println("Sensor " + String(i) + " hat keine gültige Adresse.");
     }
   }
-  update_display();
-  esp_sleep_enable_timer_wakeup(1000000ULL); // Wake up after 1 seconds (1,000,000 microseconds)
-  esp_light_sleep_start(); // Enter light sleep
   RadioEvents.TxDone = OnTxDone;
   RadioEvents.TxTimeout = OnTxTimeout;
 
@@ -311,6 +288,18 @@ void setup() {
                     LORA_SPREADING_FACTOR, LORA_CODINGRATE, LORA_PREAMBLE_LENGTH,
                     LORA_FIX_LENGTH_PAYLOAD_ON, true, 0, 0,
                     LORA_IQ_INVERSION_ON, 3000); // 3000 ms timeout
+  sensors.requestTemperatures();
+  display->clear();
+  Navigation_bar();
+
+  display->setTextAlignment(TEXT_ALIGN_CENTER);
+  display->setFont(Monospaced_bold_50);
+  float water_tempC = sensors.getTempC(water_sensor_addr);
+  String tempStr = String(water_tempC, 0) + "°C";
+  Serial.println(tempStr);
+  display->drawString(125, 40, tempStr);
+  update_display();
+  sendLoRaWithTempsAndBattery();
 }
 
 void printAddress(DeviceAddress deviceAddress) {
@@ -351,21 +340,6 @@ void sendLoRaWithTempsAndBattery() {
 }
 
 void loop() {
-  sensors.requestTemperatures();
-  display->clear();
-  Navigation_bar();
-
-  display->setTextAlignment(TEXT_ALIGN_CENTER);
-  display->setFont(Monospaced_bold_50);
-  float water_tempC = sensors.getTempC(water_sensor_addr);
-  String tempStr = String(water_tempC, 0) + "°C";
-  Serial.println(tempStr);
-  display->drawString(125, 40, tempStr);
-  update_display();
- 	if(lora_idle == true) {
-    sendLoRaWithTempsAndBattery();
-    lora_idle = false;
-  }
   Radio.IrqProcess( );
 }
 
@@ -373,13 +347,11 @@ void OnTxDone(void) {
   // Put radio to sleep to save power
   Serial.println("txdone");
   Radio.Sleep();
-  lora_idle = true;
   enterDeepSleepForSecounds(SLEEP_TIME);
 }
 
 void OnTxTimeout(void) {
   Serial.println("txtimeout");
   Radio.Sleep();
-  lora_idle = true;
   enterDeepSleepForSecounds(60);
 }
