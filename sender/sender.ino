@@ -51,18 +51,21 @@ DeviceAddress water_sensor_addr = { 0x28, 0xD7, 0xB9, 0xB3, 0x00, 0x00, 0x00, 0x
 
 RTC_DATA_ATTR int64_t epoch_base = 0;              // Full 64-bit epoch time
 RTC_DATA_ATTR uint32_t last_awake_duration_ms = 0; // Awake time before last sleep
+RTC_DATA_ATTR bool send_on_lora = true;
+
+// LoraWAN
+uint8_t appPort = 2;
+
 unsigned long current_awake_start = 0;
 
-void VextON(void)
-{
+void VextON(void) {
   pinMode(18,OUTPUT);
   digitalWrite(18, HIGH);
   pinMode(46,OUTPUT);
   digitalWrite(46, HIGH);
 }
 
-void VextOFF(void) //Vext default OFF
-{
+void VextOFF(void) {
   pinMode(18,OUTPUT);
   digitalWrite(18, LOW);
   pinMode(46,OUTPUT);
@@ -146,10 +149,9 @@ void init_display () {
   epaper_display->setTextAlignment(TEXT_ALIGN_LEFT);
 }
 
-void Navigation_bar() {
+void Navigation_bar(float airtempC) {
   struct tm timeinfo;
   getLocalTime(&timeinfo);
-  float airtempC = sensors.getTempC(air_sensor_addr);
   char buffer[32];
   strftime(buffer, sizeof(buffer), "%H:%M:%S  %d.%m.%Y", &timeinfo);
   epaper_display->setTextAlignment(TEXT_ALIGN_LEFT);
@@ -237,17 +239,17 @@ void setup() {
                     LORA_FIX_LENGTH_PAYLOAD_ON, true, 0, 0,
                     LORA_IQ_INVERSION_ON, 3000); // 3000 ms timeout
   sensors.requestTemperatures();
+  float airtempC = sensors.getTempC(air_sensor_addr);
+  float watertempC = sensors.getTempC(water_sensor_addr);
   epaper_display->clear();
-  Navigation_bar();
-
+  Navigation_bar(airtempC);
   epaper_display->setTextAlignment(TEXT_ALIGN_CENTER);
   epaper_display->setFont(Monospaced_bold_50);
-  float water_tempC = sensors.getTempC(water_sensor_addr);
-  String tempStr = String(water_tempC, 0) + "°C";
+  String tempStr = String(watertempC, 0) + "°C";
   Serial.println(tempStr);
   epaper_display->drawString(125, 40, tempStr);
   update_display();
-  sendLoRaWithTempsAndBattery();
+  sendLoRaWithTempsAndBattery(airtempC, watertempC, batteryVoltage);
 }
 
 void printAddress(DeviceAddress deviceAddress) {
@@ -258,10 +260,7 @@ void printAddress(DeviceAddress deviceAddress) {
   Serial.println();
 }
 
-void sendLoRaWithTempsAndBattery() {
-  float airTemp = sensors.getTempC(air_sensor_addr);
-  float waterTemp = sensors.getTempC(water_sensor_addr);
-
+void sendLoRaWithTempsAndBattery(float airTemp,float waterTemp, float batteryVoltage) {
   // Format sensor addresses as hex
   char airAddrStr[17];
   char waterAddrStr[17];
@@ -297,8 +296,47 @@ void sendLoRaWithTempsAndBattery() {
 }
 
 void loop() {
-  Radio.IrqProcess( );
+  if (send_on_lora) {
+    Radio.IrqProcess();
+  } else {
+  /*  
+  switch (deviceState) {
+    case DEVICE_STATE_INIT: {
+      LoRaWAN.generateDeveuiByChipID();
+      LoRaWAN.init(loraWanClass, loraWanRegion);
+      //both set join DR and DR when ADR off
+      LoRaWAN.setDefaultDR(3);
+      break;
+    }
+    case DEVICE_STATE_JOIN {
+        LoRaWAN.join();
+        break;
+    }
+    case DEVICE_STATE_SEND: {
+        prepareTxFrame(appPort);
+        LoRaWAN.send();
+        deviceState = DEVICE_STATE_CYCLE;
+        break;
+    }
+    case DEVICE_STATE_CYCLE: {
+      // Schedule next packet transmission
+      txDutyCycleTime = appTxDutyCycle + randr(-APP_TX_DUTYCYCLE_RND, APP_TX_DUTYCYCLE_RND);
+      LoRaWAN.cycle(txDutyCycleTime);
+      deviceState = DEVICE_STATE_SLEEP;
+      break;
+    }
+    case DEVICE_STATE_SLEEP:{
+      LoRaWAN.sleep(loraWanClass);
+      break;
+    }
+    default:{
+      deviceState = DEVICE_STATE_INIT;
+      break;
+    }
+  */
+  }
 }
+
 
 void OnTxDone(void) {
   // Put radio to sleep to save power
