@@ -1,3 +1,8 @@
+#define Resolution 0.000244140625 
+#define battary_in 3.3
+#define coefficient 5.30624798087485
+float batteryVoltage = 0;
+
 #define battery_w 13
 #define battery_h 13
 const uint8_t batteryfull[] = {
@@ -32,3 +37,28 @@ const uint8_t battery0[] = {
   0x00, 0x00, 0xE0, 0x00, 0xF8, 0x03, 0xF8, 0x03, 0x18, 0x03, 0x18, 0x03, 
   0x18, 0x03, 0x18, 0x03, 0x18, 0x03, 0x18, 0x03, 0xF8, 0x03, 0xF8, 0x03, 
   0x00, 0x00, };
+
+void battery() {   
+  int rawADC = analogRead(7);
+  batteryVoltage = rawADC * Resolution * battary_in * coefficient;//battary/4096*3.3*coefficient
+  // Battery percentage
+  float batteryMin = 3.0;
+  float batteryMax = 4.2;
+  float batteryPercent = ((batteryVoltage - batteryMin) / (batteryMax - batteryMin)) * 100.0;
+  batteryPercent = constrain(batteryPercent, 0, 100);
+  Serial.printf("Raw ADC: %d | Voltage: %.3f | %.0f%%\n", rawADC, batteryVoltage, batteryPercent);
+  int level = batteryPercent / 12.5;  // 0–8 range
+
+  switch (level) {
+    case 0: epaper_display->drawXbm(230, 0, battery_w, battery_h, battery0); break;
+    case 1: epaper_display->drawXbm(230, 0, battery_w, battery_h, battery1); break;
+    case 2: epaper_display->drawXbm(230, 0, battery_w, battery_h, battery2); break;
+    case 3: epaper_display->drawXbm(230, 0, battery_w, battery_h, battery3); break;
+    case 4: epaper_display->drawXbm(230, 0, battery_w, battery_h, battery4); break;
+    case 5: epaper_display->drawXbm(230, 0, battery_w, battery_h, battery5); break;
+    case 6: epaper_display->drawXbm(230, 0, battery_w, battery_h, battery6); break;
+    default:
+      epaper_display->drawXbm(230, 0, battery_w, battery_h, batteryfull);
+      break;
+  }  
+}

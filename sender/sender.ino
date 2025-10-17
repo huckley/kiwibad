@@ -9,10 +9,15 @@
 #include "HT_E0213A367.h"
 #include "driver/board-config.h"
 #include "Monospaced_bold_50.h"
-#include "battery.h"
 #include "esp_bt.h"                 // ESP32 Bluetooth control (power saving)
 #include "esp_wifi.h"               // ESP32 WiFi control (power saving)
+
+ScreenDisplay *epaper_display;
+#include "battery.h"
+
 #include <time.h>
+#include "../lora-settings.h"
+#include "../secret.h"
 
 // ===============================
 // ONE WIRE Configuration
@@ -30,35 +35,12 @@ int deviceCount = 0;
 DeviceAddress air_sensor_addr   = { 0x28, 0xCE, 0xC8, 0x37, 0x00, 0x00, 0x00, 0x40 };
 DeviceAddress water_sensor_addr = { 0x28, 0xD7, 0xB9, 0xB3, 0x00, 0x00, 0x00, 0xFA };
 
-
 // ===============================
 // LoRa Configuration
 // ===============================
 
-#define RF_FREQUENCY 865000000      // Frequency for EU868 band (Hz)
-#define TX_OUTPUT_POWER 5           // Transmission power in dBm
-#define LORA_BANDWIDTH 0            // 125 kHz bandwidth
-#define LORA_SPREADING_FACTOR 7     // SF7 for fast, short-range comms
-#define LORA_CODINGRATE 1           // 4/5 error correction
-#define LORA_PREAMBLE_LENGTH 8
-#define LORA_SYMBOL_TIMEOUT 0
-#define LORA_FIX_LENGTH_PAYLOAD_ON false
-#define LORA_IQ_INVERSION_ON false
-#define BUFFER_SIZE 80              // Max buffer for outgoing message
 #define SLEEP_TIME 60              // Sleep time in secounds
-char txpacket[BUFFER_SIZE];         // Outgoing message buffer
-// LoRa event structure
-static RadioEvents_t RadioEvents;
 
-// Function prototypes for LoRa TX events
-void OnTxDone(void);
-void OnTxTimeout(void);
-
-
-#define Resolution 0.000244140625 
-#define battary_in 3.3
-#define coefficient 5.30624798087485
-float batteryVoltage = 0;
 #define LED  45
 #define BAUD 9600
 #define PIN_EINK_SCLK 4
@@ -70,8 +52,6 @@ float batteryVoltage = 0;
 RTC_DATA_ATTR int64_t epoch_base = 0;              // Full 64-bit epoch time
 RTC_DATA_ATTR uint32_t last_awake_duration_ms = 0; // Awake time before last sleep
 unsigned long current_awake_start = 0;
-
-ScreenDisplay *display;
 
 void VextON(void)
 {
@@ -157,13 +137,13 @@ void init_display () {
   }
   digitalWrite(PIN_EINK_CS, HIGH);
   if((chipId &0x03) !=0x01) {
-    display = new HT_ICMEN2R13EFC1(3, 2, 5, 1, 4, 6, -1, 6000000); // rst,dc,cs,busy,sck,mosi,miso,frequency
+    epaper_display = new HT_ICMEN2R13EFC1(3, 2, 5, 1, 4, 6, -1, 6000000); // rst,dc,cs,busy,sck,mosi,miso,frequency
   } else {
-    display = new HT_E0213A367(3, 2, 5, 1, 4, 6, -1, 6000000); // rst,dc,cs,busy,sck,mosi,miso,frequency
+    epaper_display = new HT_E0213A367(3, 2, 5, 1, 4, 6, -1, 6000000); // rst,dc,cs,busy,sck,mosi,miso,frequency
   }
-  display->init();
-  display->setFont(ArialMT_Plain_10);
-  display->setTextAlignment(TEXT_ALIGN_LEFT);
+  epaper_display->init();
+  epaper_display->setFont(ArialMT_Plain_10);
+  epaper_display->setTextAlignment(TEXT_ALIGN_LEFT);
 }
 
 void Navigation_bar() {
@@ -172,43 +152,18 @@ void Navigation_bar() {
   float airtempC = sensors.getTempC(air_sensor_addr);
   char buffer[32];
   strftime(buffer, sizeof(buffer), "%H:%M:%S  %d.%m.%Y", &timeinfo);
-  display->setTextAlignment(TEXT_ALIGN_LEFT);
-  display->setFont(ArialMT_Plain_10);
-  display->drawLine(0, 15, 250, 15);
+  epaper_display->setTextAlignment(TEXT_ALIGN_LEFT);
+  epaper_display->setFont(ArialMT_Plain_10);
+  epaper_display->drawLine(0, 15, 250, 15);
   String line_one = "Luft: " + String(airtempC, 2) + "°C | " + buffer;
   Serial.println(line_one);
-  display->drawString(0, 0, line_one);
+  epaper_display->drawString(0, 0, line_one);
   battery();
 }
 
-void battery() {   
-  int rawADC = analogRead(7);
-  batteryVoltage = rawADC * Resolution * battary_in * coefficient;//battary/4096*3.3*coefficient
-  // Battery percentage
-  float batteryMin = 3.0;
-  float batteryMax = 4.2;
-  float batteryPercent = ((batteryVoltage - batteryMin) / (batteryMax - batteryMin)) * 100.0;
-  batteryPercent = constrain(batteryPercent, 0, 100);
-  Serial.printf("Raw ADC: %d | Voltage: %.3f | %.0f%%\n", rawADC, batteryVoltage, batteryPercent);
-  int level = batteryPercent / 12.5;  // 0–8 range
-
-  switch (level) {
-    case 0: display->drawXbm(230, 0, battery_w, battery_h, battery0); break;
-    case 1: display->drawXbm(230, 0, battery_w, battery_h, battery1); break;
-    case 2: display->drawXbm(230, 0, battery_w, battery_h, battery2); break;
-    case 3: display->drawXbm(230, 0, battery_w, battery_h, battery3); break;
-    case 4: display->drawXbm(230, 0, battery_w, battery_h, battery4); break;
-    case 5: display->drawXbm(230, 0, battery_w, battery_h, battery5); break;
-    case 6: display->drawXbm(230, 0, battery_w, battery_h, battery6); break;
-    default:
-      display->drawXbm(230, 0, battery_w, battery_h, batteryfull);
-      break;
-  }  
-}
-
 void update_display() {
-  display->update(BLACK_BUFFER);
-  display->display();
+  epaper_display->update(BLACK_BUFFER);
+  epaper_display->display();
 }
 
 void setup() {
@@ -275,15 +230,15 @@ void setup() {
                     LORA_FIX_LENGTH_PAYLOAD_ON, true, 0, 0,
                     LORA_IQ_INVERSION_ON, 3000); // 3000 ms timeout
   sensors.requestTemperatures();
-  display->clear();
+  epaper_display->clear();
   Navigation_bar();
 
-  display->setTextAlignment(TEXT_ALIGN_CENTER);
-  display->setFont(Monospaced_bold_50);
+  epaper_display->setTextAlignment(TEXT_ALIGN_CENTER);
+  epaper_display->setFont(Monospaced_bold_50);
   float water_tempC = sensors.getTempC(water_sensor_addr);
   String tempStr = String(water_tempC, 0) + "°C";
   Serial.println(tempStr);
-  display->drawString(125, 40, tempStr);
+  epaper_display->drawString(125, 40, tempStr);
   update_display();
   sendLoRaWithTempsAndBattery();
 }
@@ -315,14 +270,23 @@ void sendLoRaWithTempsAndBattery() {
     water_sensor_addr[4], water_sensor_addr[5], water_sensor_addr[6], water_sensor_addr[7]);
 
   // Prepare LoRa payload
-  snprintf(txpacket, BUFFER_SIZE,
+  snprintf(packet, BUFFER_SIZE,
     "BAT:%.2fV|T1:%.1fC[%s]|T2:%.1fC[%s]",
     batteryVoltage, airTemp, airAddrStr, waterTemp, waterAddrStr);
+ 
+  char sigHex[17];  // 8 bytes * 2 + null terminator
+  if (!computeHMACSignature(packet, sigHex, sizeof(sigHex))) {
+    Serial.println("HMAC calculation failed");
+    return;
+  }
+
+  strncat(packet, "|SIG:", BUFFER_SIZE - strlen(packet) - 1);
+  strncat(packet, sigHex, BUFFER_SIZE - strlen(packet) - 1);
 
   Serial.println("Sending LoRa message:");
-  Serial.println(txpacket);
+  Serial.println(packet);
   // Send packet
-  Radio.Send((uint8_t *)txpacket, strlen(txpacket));
+  Radio.Send((uint8_t *)packet, strlen(packet));
 }
 
 void loop() {
