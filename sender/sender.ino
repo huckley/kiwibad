@@ -166,6 +166,13 @@ void update_display() {
   epaper_display->display();
 }
 
+void flash_led(){
+  pinMode(LED, OUTPUT);
+  digitalWrite(LED, HIGH);
+  delay(200);  // LED on for 200 ms
+  digitalWrite(LED, LOW);
+}
+
 void setup() {
   current_awake_start = millis();
   Mcu.begin(HELTEC_BOARD,SLOW_CLK_TPYE);
@@ -199,7 +206,7 @@ void setup() {
 
   Serial.begin(115200);
   VextON();
-
+  flash_led();
   Serial.println("init >>> ");
   init_display();
   sensors.begin();
