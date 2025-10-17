@@ -30,3 +30,40 @@ bool computeHMACSignature(const char* message, char* sigHex, size_t sigHexSize) 
   return true;
 }
 
+bool verifyHMACSignature(const char* payload) {
+  // Find "|SIG:" in payload
+  const char* sigPtr = strstr(payload, "|SIG:");
+  if (!sigPtr) {
+    Serial.println("No signature found");
+    return false;
+  }
+
+  // Extract received signature hex string (16 chars)
+  char receivedSig[17];
+  strncpy(receivedSig, sigPtr + 5, 16);
+  receivedSig[16] = '\0';
+
+  // Extract data before signature
+  int dataLen = sigPtr - payload;
+  char dataToVerify[dataLen + 1];
+  strncpy(dataToVerify, payload, dataLen);
+  dataToVerify[dataLen] = '\0';
+
+  // Compute HMAC signature for extracted data
+  char computedSig[17];
+  if (!computeHMACSignature(dataToVerify, computedSig, sizeof(computedSig))) {
+    Serial.println("Failed to compute HMAC");
+    return false;
+  }
+
+  // Compare receivedSig and computedSig case-insensitive
+  for (int i = 0; i < 16; i++) {
+    if (toupper(receivedSig[i]) != toupper(computedSig[i])) {
+      Serial.println("Signature mismatch");
+      return false;
+    }
+  }
+
+  Serial.println("Signature verified!");
+  return true;
+}

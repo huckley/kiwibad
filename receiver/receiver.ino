@@ -8,20 +8,8 @@
 #define AP_NAME "LoRaNode-Setup"
 #define AP_PASSWORD "configureme"
 
-// ==== LoRa Parameters ====
-#define RF_FREQUENCY 865000000
-#define TX_OUTPUT_POWER 5
-#define LORA_BANDWIDTH 0
-#define LORA_SPREADING_FACTOR 7
-#define LORA_CODINGRATE 1
-#define LORA_PREAMBLE_LENGTH 8
-#define LORA_SYMBOL_TIMEOUT 0
-#define LORA_FIX_LENGTH_PAYLOAD_ON false
-#define LORA_IQ_INVERSION_ON false
-#define BUFFER_SIZE 80
-
-char rxpacket[BUFFER_SIZE];
-static RadioEvents_t RadioEvents;
+#include "../lora-settings.h"
+#include "../secret.h"
 
 typedef enum {
   LOWPOWER,
@@ -137,13 +125,19 @@ void loop() {
 
 // === LoRa Packet Received ===
 void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr) {
-  memcpy(rxpacket, payload, size);
-  rxpacket[size] = '\0';
+  memcpy(packet, payload, size);
+  packet[size] = '\0';
   Radio.Sleep();
 
-  Serial.printf("Received: \"%s\"\n", rxpacket);
+  Serial.printf("Received: \"%s\"\n", packet);
 
-  String message = String(rxpacket);
+  if (!verifyHMACSignature(packet)) {
+    Serial.println("Invalid signature - ignoring packet");
+    state = STATE_RX;
+    return;
+  }
+
+  String message = String(packet);
 
   float battery = parseValue(message, "BAT:", "V");
   float tempAir = parseValue(message, "T1:", "C");
@@ -154,7 +148,7 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr) {
   // Display update
   updateDisplay(battery, tempAir, tempWater);
 
-   state = STATE_RX; // Resume listening
+  state = STATE_RX; // Resume listening
 }
 
 // === Parse values like BAT:3.81V, T1:20.1C[...], T2:15.8C[...] ===
