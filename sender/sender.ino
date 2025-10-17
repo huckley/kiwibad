@@ -229,15 +229,17 @@ void setup() {
       Serial.println("Sensor " + String(i) + " hat keine gültige Adresse.");
     }
   }
-  RadioEvents.TxDone = OnTxDone;
-  RadioEvents.TxTimeout = OnTxTimeout;
+  if (send_on_lora) {  
+    RadioEvents.TxDone = OnTxDone;
+    RadioEvents.TxTimeout = OnTxTimeout;
 
-  Radio.Init(&RadioEvents);
-  Radio.SetChannel(RF_FREQUENCY);
-  Radio.SetTxConfig(MODEM_LORA, TX_OUTPUT_POWER, 0, LORA_BANDWIDTH,
+    Radio.Init(&RadioEvents);
+    Radio.SetChannel(RF_FREQUENCY);
+    Radio.SetTxConfig(MODEM_LORA, TX_OUTPUT_POWER, 0, LORA_BANDWIDTH,
                     LORA_SPREADING_FACTOR, LORA_CODINGRATE, LORA_PREAMBLE_LENGTH,
                     LORA_FIX_LENGTH_PAYLOAD_ON, true, 0, 0,
                     LORA_IQ_INVERSION_ON, 3000); // 3000 ms timeout
+  }
   sensors.requestTemperatures();
   float airtempC = sensors.getTempC(air_sensor_addr);
   float watertempC = sensors.getTempC(water_sensor_addr);
@@ -292,7 +294,9 @@ void sendLoRaWithTempsAndBattery(float airTemp,float waterTemp, float batteryVol
   Serial.println("Sending LoRa message:");
   Serial.println(packet);
   // Send packet
-  Radio.Send((uint8_t *)packet, strlen(packet));
+  if (send_on_lora) {
+    Radio.Send((uint8_t *)packet, strlen(packet));
+  }
 }
 
 void loop() {
