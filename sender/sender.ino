@@ -90,9 +90,6 @@ void VextOFF(void) //Vext default OFF
 }
 
 void enterDeepSleepForSecounds(uint32_t secounds) {
-  // Optional: print time or status before sleeping
-  Serial.printf("Going to deep sleep for %d secounds...\n", secounds);
-  Serial.flush();
   VextOFF ();
 
   // Prepare peripherals
@@ -111,6 +108,7 @@ void enterDeepSleepForSecounds(uint32_t secounds) {
   Serial.printf("Awake for %.2f sec, going to sleep for %u sec...\n",
                 last_awake_duration_ms / 1000.0, secounds);
   // Enable wake-up timer
+  Serial.flush();
   esp_sleep_enable_timer_wakeup((uint64_t)secounds  * 1000000ULL);
   // Enter deep sleep
   esp_deep_sleep_start();
@@ -168,7 +166,6 @@ void init_display () {
   display->setTextAlignment(TEXT_ALIGN_LEFT);
 }
 
-
 void Navigation_bar() {
   struct tm timeinfo;
   getLocalTime(&timeinfo);
@@ -193,31 +190,20 @@ void battery() {
   float batteryPercent = ((batteryVoltage - batteryMin) / (batteryMax - batteryMin)) * 100.0;
   batteryPercent = constrain(batteryPercent, 0, 100);
   Serial.printf("Raw ADC: %d | Voltage: %.3f | %.0f%%\n", rawADC, batteryVoltage, batteryPercent);
-  float battery_one = 12.5;
-  if (batteryPercent < battery_one) {
-    display->drawXbm(230, 0, battery_w, battery_h, battery0);
-  }
-  else if (batteryPercent < 2 * battery_one) {
-    display->drawXbm(230, 0, battery_w, battery_h, battery1);
-  }
-  else if (batteryPercent < 3 * battery_one) {
-    display->drawXbm(230, 0, battery_w, battery_h, battery2);
-  }
-  else if (batteryPercent < 4 * battery_one) {
-    display->drawXbm(230, 0, battery_w, battery_h, battery3);
-  }
-  else if (batteryPercent < 5 * battery_one) {
-    display->drawXbm(230, 0, battery_w, battery_h, battery4);
-  }
-  else if (batteryPercent < 6 * battery_one) {
-    display->drawXbm(230, 0, battery_w, battery_h, battery5);
-  }
-  else if (batteryPercent < 7 * battery_one) {
-    display->drawXbm(230, 0, battery_w, battery_h, battery6);
-  }
-  else {
-    display->drawXbm(230, 0, battery_w, battery_h, batteryfull);
-  }
+  int level = batteryPercent / 12.5;  // 0–8 range
+
+  switch (level) {
+    case 0: display->drawXbm(230, 0, battery_w, battery_h, battery0); break;
+    case 1: display->drawXbm(230, 0, battery_w, battery_h, battery1); break;
+    case 2: display->drawXbm(230, 0, battery_w, battery_h, battery2); break;
+    case 3: display->drawXbm(230, 0, battery_w, battery_h, battery3); break;
+    case 4: display->drawXbm(230, 0, battery_w, battery_h, battery4); break;
+    case 5: display->drawXbm(230, 0, battery_w, battery_h, battery5); break;
+    case 6: display->drawXbm(230, 0, battery_w, battery_h, battery6); break;
+    default:
+      display->drawXbm(230, 0, battery_w, battery_h, batteryfull);
+      break;
+  }  
 }
 
 void update_display() {
