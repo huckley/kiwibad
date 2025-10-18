@@ -6,6 +6,7 @@
 #include <driver/gpio.h>
 #include <driver/rtc_io.h>
 #include <HardwareSerial.h>
+#include "HT_TinyGPS++.h"
 #include "HT_E0213A367.h"
 #include "driver/board-config.h"
 #include "Monospaced_bold_50.h"
@@ -69,29 +70,28 @@ bool loraWanAdr = true;
 
 /* Indicates if the node is sending confirmed or unconfirmed messages */
 bool isTxConfirmed = true;
-#define LORAWAN_DEVEUI_AUTO 1
-#define JOIN_TIMEOUT_MS 20000  // 20 seconds timeout
 
 /* Application port */
 uint8_t appPort = 2;
 uint8_t confirmedNbTrials = 4;
 
-
-#define SLEEP_TIME 60              // Sleep time in secounds
-
 #define LED  45
-#define BAUD 9600
 #define PIN_EINK_SCLK 4
 #define PIN_EINK_DC   2
 #define PIN_EINK_CS   5
 #define PIN_EINK_RES  3
 #define PIN_EINK_MOSI 6
 
-RTC_DATA_ATTR int64_t epoch_base = 0;              // Full 64-bit epoch time
-RTC_DATA_ATTR uint32_t last_awake_duration_ms = 0; // Awake time before last sleep
-RTC_DATA_ATTR bool send_on_lora = true;
+#define SLEEP_TIME 60              // Sleep time in secounds
+#define GPS_RX 44
+#define GPS_TX 43
+#define GPS_BAUD 9600
+#define GPS_TIMEOUT_MS 180000                 // Max wait for GPS (3 min)
+#define TZ_INFO "CET-1CEST,M3.5.0/2,M10.5.0/3" // Timezone string
+TinyGPSPlus GPS;
 
-unsigned long current_awake_start = 0;
+RTC_DATA_ATTR int64_t epoch_base = 0;              // Full 64-bit epoch time
+RTC_DATA_ATTR bool send_on_lora = true;
 
 static void prepareTxFrame(uint8_t port, float airTemp,float waterTemp, float batteryVoltage) {
   int16_t airTempInt = (int16_t)(airTemp * 100);        // 2 bytes
@@ -140,9 +140,11 @@ void enterDeepSleepForSecounds(uint32_t secounds) {
   pinMode(11, ANALOG);
   pinMode(10, ANALOG);
 
-  last_awake_duration_ms = millis() - current_awake_start;
-  Serial.printf("Awake for %.2f sec, going to sleep for %u sec...\n",
-                last_awake_duration_ms / 1000.0, secounds);
+  struct timeval now;
+  gettimeofday(&now, nullptr);         // get current system time
+  epoch_base = (int64_t)now.tv_sec;    // save seconds part to RTC memory
+  Serial.printf("Saved time to RTC: %lld\n", epoch_base);
+  Serial.printf("going to sleep for %u sec...\n", secounds);
   // Enable wake-up timer
   Serial.flush();
   //send_on_lora = !send_on_lora;
@@ -229,42 +231,96 @@ void flash_led(){
   digitalWrite(LED, LOW);
 }
 
+void synctime_from_gps(){
+  Serial.println("🛰️  Syncing time from GPS...");
+  Serial1.begin(GPS_BAUD, SERIAL_8N1, GPS_RX, GPS_TX);
+  unsigned long start = millis();
+  bool synced = false;
+
+  while (millis() - start < GPS_TIMEOUT_MS) {
+    while (Serial1.available() > 0) {
+
+      GPS.encode(Serial1.read());
+        if (GPS.time.isUpdated() && GPS.date.isUpdated() && GPS.time.isValid() && GPS.date.isValid() ) {
+          struct tm t;
+          t.tm_year = GPS.date.year() - 1900;
+          t.tm_mon  = GPS.date.month() - 1;
+          t.tm_mday = GPS.date.day();
+          t.tm_hour = GPS.time.hour();
+          t.tm_min  = GPS.time.minute();
+          t.tm_sec  = GPS.time.second();
+          t.tm_isdst = -1;
+
+				Serial.printf("%02d.%02d.%04d %02d:%02d:%02d.%02d",GPS.date.day(),GPS.date.month(),GPS.date.year(),GPS.time.hour(),GPS.time.minute(),GPS.time.second(),GPS.time.centisecond());
+        Serial.print("LAT: ");
+        Serial.print(GPS.location.lat(), 6);
+        Serial.print(", LON: ");
+        Serial.print(GPS.location.lng(), 6);
+        Serial.println();
+        
+          time_t gpsEpoch = mktime(&t);
+          if (gpsEpoch > 0) {
+            struct timeval tv = { .tv_sec = gpsEpoch };
+            settimeofday(&tv, nullptr);
+            epoch_base = (int64_t)gpsEpoch;
+            Serial.println("✅ GPS time synced:");
+            synced = true;
+            break;
+          }
+        }
+    }
+    if (synced) break;
+  }
+  if (!synced) {
+      Serial.println(GPS.charsProcessed());
+      Serial.println("⚠️ GPS sync failed. Continuing with estimated time.");
+  }
+}
+
 void setup() {
-  current_awake_start = millis();
   Mcu.begin(HELTEC_BOARD,SLOW_CLK_TPYE);
   setCpuFrequencyMhz(80);
   analogSetAttenuation(ADC_11db);
   analogReadResolution(12);
  
-  //BERLIN
-  setenv("TZ", "CET-1CEST,M3.5.0/2,M10.5.0/3", 1);
-
-  if (epoch_base == 0) {
-    } else {
-    // Woke from deep sleep - calculate new time
-    int64_t updated_time = epoch_base
-                         + SLEEP_TIME            // time spent asleep
-                         + last_awake_duration_ms / 1000; // time spent awake last cycle
-
-    struct timeval tv;
-    tv.tv_sec = (time_t)(updated_time);  // Truncated to 32-bit if needed
-    tv.tv_usec = 0;
-    settimeofday(&tv, nullptr);
-
-    epoch_base = updated_time; // update for next sleep
-  }
+ // Set timezone
+  setenv("TZ", TZ_INFO, 1);
   tzset();
+
+  Serial.begin(115200);
+  VextON();
+  
+  if (epoch_base > 0) {
+    time_t restored = (time_t)(epoch_base + SLEEP_TIME); // Add sleep duration
+    struct timeval now = { .tv_sec = restored };
+    settimeofday(&now, nullptr);
+    Serial.println("✅ Restored time from RTC:");
+  } else {
+    Serial.println("❌ No RTC time available.");
+    struct timeval now { .tv_sec = epoch_base }; 
+    settimeofday(&now, nullptr);
+   }
+
   // Disable Bluetooth and WiFi completely
   btStop();
   esp_bt_controller_disable();
   esp_wifi_stop();
   esp_wifi_deinit();
 
-  Serial.begin(115200);
-  VextON();
   flash_led();
   Serial.println("init >>> ");
   init_display();
+
+  char buffer[32];
+  struct tm timeinfo;
+  strftime(buffer, sizeof(buffer), "%H:%M:%S  %d.%m.%Y", &timeinfo);
+  Serial.println(buffer);
+  if (timeinfo.tm_min < 5) {
+    synctime_from_gps();
+  }
+  strftime(buffer, sizeof(buffer), "%H:%M:%S  %d.%m.%Y", &timeinfo);
+  Serial.println(buffer);
+
   sensors.begin();
 
   deviceCount = sensors.getDeviceCount();
@@ -276,9 +332,7 @@ void setup() {
       Serial.print(i);
       Serial.print(" Adresse: ");
       printAddress(sensorAddresses[i]);
-
       sensors.setResolution(sensorAddresses[i], TEMPERATURE_PRECISION);
-
     } else {
       Serial.println("Sensor " + String(i) + " hat keine gültige Adresse.");
     }
@@ -369,9 +423,6 @@ void loop() {
   if (send_on_lora) {
     Radio.IrqProcess();
   } else {
-
-#define JOIN_TIMEOUT_MS 20000  // 20 seconds timeout
-
     switch (deviceState) {
       case DEVICE_STATE_INIT: {
 #if(LORAWAN_DEVEUI_AUTO)
@@ -411,6 +462,7 @@ void loop() {
     }
   }
 }
+
 void OnJoinRejected(void) {
   Serial.println("OTAA Join rejected!");
   // Retry or handle join failure
