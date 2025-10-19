@@ -50,6 +50,9 @@ uint8_t appSKey[] = { };
 uint32_t devAddr;
 /*LoraWan channelsmask, default channels 0-7*/
 uint16_t userChannelsMask[6] = { 0x00FF, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000 };
+#define LORAMAC_DEFAULT_RX2_FREQUENCY 869525000
+#define LORAMAC_DEFAULT_RX2_DR        DR_3
+
 /*LoraWan region, select in arduino IDE tools*/
 LoRaMacRegion_t loraWanRegion = ACTIVE_REGION;
 /*LoraWan Class, Class A and Class C are supported*/
