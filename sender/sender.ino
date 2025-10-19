@@ -43,37 +43,31 @@ DeviceAddress water_sensor_addr = { 0x28, 0xD7, 0xB9, 0xB3, 0x00, 0x00, 0x00, 0x
 // ===============================
 /* OTAA para*/
 uint8_t devEui[] = { 0x70, 0xB3, 0xD5, 0x7E, 0xD0, 0x06, 0x53, 0xC8 };
-uint8_t appEui[] = { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
-uint8_t appKey[] = { 0x12, 0xD5, 0x0E, 0xEF, 0x28, 0xB3, 0x28, 0xFC, 0x0E, 0xCB, 0x13, 0x80, 0x1A, 0x1A, 0xA8, 0xB6 };
+uint8_t appEui[] = { 0xD7, 0xF9, 0x79, 0x7A, 0x39, 0x42, 0xAD, 0x79 };
+uint8_t appKey[] = { 0xA7, 0x1B, 0xF6, 0x04, 0xB2, 0xB3, 0x50, 0xCA, 0x14, 0x21, 0xDF, 0xB9, 0xD1, 0xEA, 0x62, 0x4C };
 /* ABP para*/
 uint8_t nwkSKey[] = { 0x15, 0xb1, 0xd0, 0xef, 0xa4, 0x63, 0xdf, 0xbe, 0x3d, 0x11, 0x18, 0x1e, 0x1e, 0xc7, 0xda,0x85 };
 uint8_t appSKey[] = { 0xd7, 0x2c, 0x78, 0x75, 0x8c, 0xdc, 0xca, 0xbf, 0x55, 0xee, 0x4a, 0x77, 0x8d, 0x16, 0xef,0x67 };
 uint32_t devAddr =  ( uint32_t )0x007e6ae1;
-
 /*LoraWan channelsmask, default channels 0-7*/
 uint16_t userChannelsMask[6] = { 0x00FF, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000 };
-
 /*LoraWan region, select in arduino IDE tools*/
 LoRaMacRegion_t loraWanRegion = ACTIVE_REGION;
-
 /*LoraWan Class, Class A and Class C are supported*/
 DeviceClass_t loraWanClass = CLASS_A;
-
 /*the application data transmission duty cycle.  value in [ms].*/
 uint32_t appTxDutyCycle = 15000*4*2;
-
 /*OTAA or ABP*/
 bool overTheAirActivation = true;
-
 /*ADR enable*/
 bool loraWanAdr = true;
-
 /* Indicates if the node is sending confirmed or unconfirmed messages */
 bool isTxConfirmed = true;
-
 /* Application port */
 uint8_t appPort = 2;
 uint8_t confirmedNbTrials = 4;
+#define JOIN_TIMEOUT 300000  // Timeout for OTAA join in milliseconds (300 seconds)
+unsigned long joinStartTime = 0;
 
 #define LED  45
 #define PIN_EINK_SCLK 4
@@ -109,7 +103,6 @@ static void prepareTxFrame(uint8_t port, float airTemp,float waterTemp, float ba
   appData[4] = (battVoltInt >> 8) & 0xFF;
   appData[5] = battVoltInt & 0xFF;
 }
-
 
 void VextON(void) {
   pinMode(18,OUTPUT);
@@ -147,7 +140,7 @@ void enterDeepSleepForSecounds(uint32_t secounds) {
   Serial.printf("going to sleep for %u sec...\n", secounds);
   // Enable wake-up timer
   Serial.flush();
-  //send_on_lora = !send_on_lora;
+  send_on_lora = !send_on_lora;
   esp_sleep_enable_timer_wakeup((uint64_t)secounds  * 1000000ULL);
   // Enter deep sleep
   esp_deep_sleep_start();
@@ -252,7 +245,6 @@ void synctime_from_gps(){
           t.tm_isdst = -1;
 
           time_t gpsEpoch = mktime(&t);
-          Serial.println(gpsEpoch);
           if (gpsEpoch > 1760817666) {
             struct timeval tv = { .tv_sec = gpsEpoch };
             settimeofday(&tv, nullptr);
@@ -315,6 +307,10 @@ void setup() {
   flash_led();
   Serial.println("init >>> ");
   init_display();
+#if(LORAWAN_DEVEUI_AUTO)
+  LoRaWAN.generateDeveuiByChipID();
+#endif
+  printTTNParams();
   restore_time_from_rtc(start);
   sensors.begin();
   deviceCount = sensors.getDeviceCount();
@@ -397,20 +393,30 @@ void sendLoRaWithTempsAndBattery(float airTemp,float waterTemp, float batteryVol
 
   Serial.println("Sending LoRa message:");
   Serial.println(packet);
-  // Send packet
-  if (send_on_lora) {
-    Radio.Send((uint8_t *)packet, strlen(packet));
-  }
+  Radio.Send((uint8_t *)packet, strlen(packet));
 }
 
-void printDevEUI() {
-  extern uint8_t devEui[8];  // Declared in the Heltec library
-  Serial.print("Generated DevEUI: ");
-  for (int i = 0; i < 8; i++) {
-    if (devEui[i] < 0x10) Serial.print("0"); // Leading zero for single-digit values
-    Serial.print(devEui[i], HEX);
+String toHexString(const uint8_t* data, size_t len) {
+  String result = "";
+  for (size_t i = 0; i < len; i++) {
+    if (data[i] < 0x10) result += "0";
+    result += String(data[i], HEX);
   }
-  Serial.println();
+  return result;
+}
+
+void printTTNParams(){
+  extern uint8_t devEui[8];  // Declared in the Heltec library
+
+  Serial.print("DevEUI: ");
+  Serial.println(toHexString(devEui, sizeof(devEui)));
+
+  Serial.print("JoinEUI: ");
+  Serial.println(toHexString(appEui, sizeof(appEui)));
+
+  Serial.print("AppKey: ");
+  Serial.println(toHexString(appKey, sizeof(appKey)));
+  
 }
 
 void loop() {
@@ -419,10 +425,7 @@ void loop() {
   } else {
     switch (deviceState) {
       case DEVICE_STATE_INIT: {
-#if(LORAWAN_DEVEUI_AUTO)
-        LoRaWAN.generateDeveuiByChipID();
-#endif
-        printDevEUI();
+        Serial.println("LoraWAN init");
         LoRaWAN.init(loraWanClass, loraWanRegion);
         //both set join DR and DR when ADR off
         LoRaWAN.setDefaultDR(3);
@@ -430,23 +433,29 @@ void loop() {
       }
       case DEVICE_STATE_JOIN: {
           Serial.println("=== DEVICE_STATE_JOIN: starting OTAA join");
+          joinStartTime = millis();
           LoRaWAN.join();
           Serial.println("LoRaWAN.join() called");
           break;
       }
       case DEVICE_STATE_SEND: {
+          Serial.println("LoraWAN send");
           prepareTxFrame(appPort,airTempC,waterTempC,batteryVoltage);
           LoRaWAN.send();
           deviceState = DEVICE_STATE_CYCLE;
           break;
       }
       case DEVICE_STATE_CYCLE: {
+        Serial.println("LoraWAN cycle");
         enterDeepSleepForSecounds(SLEEP_TIME);
         deviceState = DEVICE_STATE_SLEEP;
         break;
       }
       case DEVICE_STATE_SLEEP:{
         LoRaWAN.sleep(loraWanClass);
+        if (millis() - joinStartTime >= JOIN_TIMEOUT) {
+          enterDeepSleepForSecounds(SLEEP_TIME);
+        }
         break;
       }
       default:{
@@ -457,16 +466,6 @@ void loop() {
   }
 }
 
-void OnJoinRejected(void) {
-  Serial.println("OTAA Join rejected!");
-  // Retry or handle join failure
-  deviceState = DEVICE_STATE_CYCLE; // Try join again or reset
-}
-
-void OnJoinAccepted(void) {
-  Serial.println("OTAA Join accepted!");
-  deviceState = DEVICE_STATE_SEND; // Move to send state
-}
 void OnTxDone(void) {
   Serial.println("txdone");
   enterDeepSleepForSecounds(SLEEP_TIME);
