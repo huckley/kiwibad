@@ -1,3 +1,4 @@
+#include <time.h>
 #include "Arduino.h"
 #include "LoRaWan_APP.h"
 #include <OneWire.h>
@@ -15,8 +16,6 @@
 
 ScreenDisplay *epaper_display;
 #include "battery.h"
-
-#include <time.h>
 #include "../lora-settings.h"
 #include "../secret.h"
 
@@ -67,7 +66,7 @@ bool isTxConfirmed = true;
 uint8_t appPort = 2;
 uint8_t confirmedNbTrials = 4;
 #define JOIN_TIMEOUT 300000  // Timeout for OTAA join in milliseconds (300 seconds)
-unsigned long joinStartTime = 0;
+uint32_t joinStartTime = 0;
 
 #define LED  45
 #define PIN_EINK_SCLK 4
@@ -80,19 +79,19 @@ unsigned long joinStartTime = 0;
 #define GPS_RX 43  // GPS TX -> ESP32 RX pin (GPIO 16)
 #define GPS_TX 44  // GPS RX -> ESP32 TX pin (GPIO 17)
 #define GPS_BAUD 9600
-#define GPS_TIMEOUT_MS 180000                 // Max wait for GPS (3 min)
-#define TZ_INFO "CET-1CEST,M3.5.0/2,M10.5.0/3" // Timezone string
+#define GPS_TIMEOUT_MS 180000  // Max wait for GPS (3 min)
+#define TZ_INFO "CET-1CEST,M3.5.0/2,M10.5.0/3"  // Timezone string
 TinyGPSPlus GPS;
 
-RTC_DATA_ATTR int64_t epoch_base = 0;              // Full 64-bit epoch time
+RTC_DATA_ATTR int64_t epoch_base = 0;  // Full 64-bit epoch time
 RTC_DATA_ATTR bool send_on_lora = true;
 
-static void prepareTxFrame(uint8_t port, float airTemp,float waterTemp, float batteryVoltage) {
-  int16_t airTempInt = (int16_t)(airTemp * 100);        // 2 bytes
-  int16_t waterTempInt = (int16_t)(waterTemp * 100);    // 2 bytes
-  uint16_t battVoltInt = (uint16_t)(batteryVoltage * 1000); // 2 bytes
+static void prepareTxFrame(uint8_t port, float airTemp, float waterTemp, float batteryVoltage) {
+  int16_t airTempInt = (int16_t)(airTemp * 100);  // 2 bytes
+  int16_t waterTempInt = (int16_t)(waterTemp * 100);  // 2 bytes
+  uint16_t battVoltInt = (uint16_t)(batteryVoltage * 1000);  // 2 bytes
 
-  appDataSize = 6; // 2 + 2 + 2 = 6 bytes
+  appDataSize = 6;  // 2 + 2 + 2 = 6 bytes
 
   appData[0] = (airTempInt >> 8) & 0xFF;
   appData[1] = airTempInt & 0xFF;
@@ -105,33 +104,33 @@ static void prepareTxFrame(uint8_t port, float airTemp,float waterTemp, float ba
 }
 
 void VextON(void) {
-  pinMode(18,OUTPUT);
+  pinMode(18, OUTPUT);
   digitalWrite(18, HIGH);
-  pinMode(46,OUTPUT);
+  pinMode(46, OUTPUT);
   digitalWrite(46, HIGH);
 }
 
 void VextOFF(void) {
-  pinMode(18,OUTPUT);
+  pinMode(18, OUTPUT);
   digitalWrite(18, LOW);
-  pinMode(46,OUTPUT);
+  pinMode(46, OUTPUT);
   digitalWrite(46, LOW);
 }
 
 void enterDeepSleepForSecounds(uint32_t secounds) {
-  VextOFF ();
+  VextOFF();
 
   // Prepare peripherals
   Radio.Sleep();         // Put LoRa radio to sleep
   SPI.end();             // End SPI to save power
 
   // Set other unused pins to analog to minimize leakage
-  pinMode(RADIO_DIO_1,ANALOG);
-  pinMode(RADIO_RESET,ANALOG);
-  pinMode(RADIO_BUSY,ANALOG);
-  pinMode(LORA_CLK,ANALOG);
-  pinMode(LORA_MISO,ANALOG);
-  pinMode(LORA_MOSI,ANALOG);
+  pinMode(RADIO_DIO_1, ANALOG);
+  pinMode(RADIO_RESET, ANALOG);
+  pinMode(RADIO_BUSY, ANALOG);
+  pinMode(LORA_CLK, ANALOG);
+  pinMode(LORA_MISO, ANALOG);
+  pinMode(LORA_MOSI, ANALOG);
 
   struct timeval now;
   gettimeofday(&now, nullptr);         // get current system time
@@ -146,13 +145,13 @@ void enterDeepSleepForSecounds(uint32_t secounds) {
   esp_deep_sleep_start();
 }
 
-void init_display () {
+void init_display() {
   pinMode(PIN_EINK_SCLK, OUTPUT); 
   pinMode(PIN_EINK_DC, OUTPUT); 
   pinMode(PIN_EINK_CS, OUTPUT);
   pinMode(PIN_EINK_RES, OUTPUT);
     
-  //rest e-ink
+  // rest e-ink
   digitalWrite(PIN_EINK_RES, LOW);
   delay(20);
   digitalWrite(PIN_EINK_RES, HIGH);
@@ -188,10 +187,10 @@ void init_display () {
     if (digitalRead(PIN_EINK_MOSI)) chipId |= (1 << b);  
   }
   digitalWrite(PIN_EINK_CS, HIGH);
-  if((chipId &0x03) !=0x01) {
-    epaper_display = new HT_ICMEN2R13EFC1(3, 2, 5, 1, 4, 6, -1, 6000000); // rst,dc,cs,busy,sck,mosi,miso,frequency
+  if ((chipId &0x03) !=0x01) {
+    epaper_display = new HT_ICMEN2R13EFC1(3, 2, 5, 1, 4, 6, -1, 6000000);  // rst,dc,cs,busy,sck,mosi,miso,frequency
   } else {
-    epaper_display = new HT_E0213A367(3, 2, 5, 1, 4, 6, -1, 6000000); // rst,dc,cs,busy,sck,mosi,miso,frequency
+    epaper_display = new HT_E0213A367(3, 2, 5, 1, 4, 6, -1, 6000000);  // rst,dc,cs,busy,sck,mosi,miso,frequency
   }
   epaper_display->init();
   epaper_display->setFont(ArialMT_Plain_10);
@@ -217,24 +216,23 @@ void update_display() {
   epaper_display->display();
 }
 
-void flash_led(){
+void flash_led() {
   pinMode(LED, OUTPUT);
   digitalWrite(LED, HIGH);
   delay(200);  // LED on for 200 ms
   digitalWrite(LED, LOW);
 }
 
-void synctime_from_gps(){
+void synctime_from_gps() {
   Serial.println("🛰️  Syncing time from GPS...");
   Serial1.begin(GPS_BAUD, SERIAL_8N1, GPS_RX, GPS_TX);
-  unsigned long start = millis();
+  uint32_t start = millis();
   bool synced = false;
 
   while (millis() - start < GPS_TIMEOUT_MS) {
     while (Serial1.available() > 0) {
-
       GPS.encode(Serial1.read());
-        if (GPS.time.isUpdated() && GPS.date.isUpdated() && GPS.time.isValid() && GPS.date.isValid() ) {
+        if ( GPS.time.isUpdated() && GPS.date.isUpdated() && GPS.time.isValid() && GPS.date.isValid() ) {
          struct tm t;
           t.tm_year = GPS.date.year() - 1900;
           t.tm_mon  = GPS.date.month() - 1;
@@ -263,10 +261,10 @@ void synctime_from_gps(){
   }
 }
 
-void restore_time_from_rtc(unsigned long start){
+void restore_time_from_rtc(uint32_t start) {
   Serial.printf("Saved time from RTC: %lld\n", epoch_base);
   if (epoch_base > 0) {
-    time_t restored = (time_t)(epoch_base + SLEEP_TIME + (start / 1000)); // Add sleep duration
+    time_t restored = (time_t)(epoch_base + SLEEP_TIME + (start / 1000));  // Add sleep duration
     struct timeval now = { .tv_sec = restored };
     settimeofday(&now, nullptr);
     Serial.printf("✅ Restored time from RTC: ");
@@ -286,7 +284,7 @@ void restore_time_from_rtc(unsigned long start){
 }
 
 void setup() {
-  Mcu.begin(HELTEC_BOARD,SLOW_CLK_TPYE);
+  Mcu.begin(HELTEC_BOARD, SLOW_CLK_TPYE);
   setCpuFrequencyMhz(80);
   analogSetAttenuation(ADC_11db);
   analogReadResolution(12);
@@ -294,7 +292,7 @@ void setup() {
  // Set timezone
   setenv("TZ", TZ_INFO, 1);
   tzset();
-  unsigned long start = millis();
+  uint32_t start = millis();
   Serial.begin(115200);
   VextON();
  
@@ -341,7 +339,7 @@ void setup() {
     Radio.SetTxConfig(MODEM_LORA, TX_OUTPUT_POWER, 0, LORA_BANDWIDTH,
                     LORA_SPREADING_FACTOR, LORA_CODINGRATE, LORA_PREAMBLE_LENGTH,
                     LORA_FIX_LENGTH_PAYLOAD_ON, true, 0, 0,
-                    LORA_IQ_INVERSION_ON, 3000); // 3000 ms timeout
+                    LORA_IQ_INVERSION_ON, 3000);  // 3000 ms timeout
   }
   epaper_display->clear();
   Navigation_bar(airTempC);
@@ -405,7 +403,7 @@ String toHexString(const uint8_t* data, size_t len) {
   return result;
 }
 
-void printTTNParams(){
+void printTTNParams() {
   extern uint8_t devEui[8];  // Declared in the Heltec library
 
   Serial.print("DevEUI: ");
@@ -416,7 +414,6 @@ void printTTNParams(){
 
   Serial.print("AppKey: ");
   Serial.println(toHexString(appKey, sizeof(appKey)));
-  
 }
 
 void loop() {
@@ -427,7 +424,7 @@ void loop() {
       case DEVICE_STATE_INIT: {
         Serial.println("LoraWAN init");
         LoRaWAN.init(loraWanClass, loraWanRegion);
-        //both set join DR and DR when ADR off
+        // both set join DR and DR when ADR off
         LoRaWAN.setDefaultDR(3);
         break;
       }
@@ -440,7 +437,7 @@ void loop() {
       }
       case DEVICE_STATE_SEND: {
           Serial.println("LoraWAN send");
-          prepareTxFrame(appPort,airTempC,waterTempC,batteryVoltage);
+          prepareTxFrame(appPort, airTempC, waterTempC, batteryVoltage);
           LoRaWAN.send();
           deviceState = DEVICE_STATE_CYCLE;
           break;
@@ -451,14 +448,15 @@ void loop() {
         deviceState = DEVICE_STATE_SLEEP;
         break;
       }
-      case DEVICE_STATE_SLEEP:{
+      case DEVICE_STATE_SLEEP: {
         LoRaWAN.sleep(loraWanClass);
         if (millis() - joinStartTime >= JOIN_TIMEOUT) {
           enterDeepSleepForSecounds(SLEEP_TIME);
         }
         break;
       }
-      default:{
+      default: {
+        Serial.println("LoraWAN init");
         deviceState = DEVICE_STATE_INIT;
         break;
       }
