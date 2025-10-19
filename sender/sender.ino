@@ -83,8 +83,8 @@ uint8_t confirmedNbTrials = 4;
 #define PIN_EINK_MOSI 6
 
 #define SLEEP_TIME 60              // Sleep time in secounds
-#define GPS_RX 44
-#define GPS_TX 43
+#define GPS_RX 43  // GPS TX -> ESP32 RX pin (GPIO 16)
+#define GPS_TX 44  // GPS RX -> ESP32 TX pin (GPIO 17)
 #define GPS_BAUD 9600
 #define GPS_TIMEOUT_MS 180000                 // Max wait for GPS (3 min)
 #define TZ_INFO "CET-1CEST,M3.5.0/2,M10.5.0/3" // Timezone string
@@ -133,12 +133,12 @@ void enterDeepSleepForSecounds(uint32_t secounds) {
   SPI.end();             // End SPI to save power
 
   // Set other unused pins to analog to minimize leakage
-  pinMode(14, ANALOG);
-  pinMode(12, ANALOG);
-  pinMode(13, ANALOG);
-  pinMode(9, ANALOG);
-  pinMode(11, ANALOG);
-  pinMode(10, ANALOG);
+  pinMode(RADIO_DIO_1,ANALOG);
+  pinMode(RADIO_RESET,ANALOG);
+  pinMode(RADIO_BUSY,ANALOG);
+  pinMode(LORA_CLK,ANALOG);
+  pinMode(LORA_MISO,ANALOG);
+  pinMode(LORA_MOSI,ANALOG);
 
   struct timeval now;
   gettimeofday(&now, nullptr);         // get current system time
@@ -242,7 +242,7 @@ void synctime_from_gps(){
 
       GPS.encode(Serial1.read());
         if (GPS.time.isUpdated() && GPS.date.isUpdated() && GPS.time.isValid() && GPS.date.isValid() ) {
-          struct tm t;
+         struct tm t;
           t.tm_year = GPS.date.year() - 1900;
           t.tm_mon  = GPS.date.month() - 1;
           t.tm_mday = GPS.date.day();
@@ -251,15 +251,9 @@ void synctime_from_gps(){
           t.tm_sec  = GPS.time.second();
           t.tm_isdst = -1;
 
-				Serial.printf("%02d.%02d.%04d %02d:%02d:%02d.%02d",GPS.date.day(),GPS.date.month(),GPS.date.year(),GPS.time.hour(),GPS.time.minute(),GPS.time.second(),GPS.time.centisecond());
-        Serial.print("LAT: ");
-        Serial.print(GPS.location.lat(), 6);
-        Serial.print(", LON: ");
-        Serial.print(GPS.location.lng(), 6);
-        Serial.println();
-        
           time_t gpsEpoch = mktime(&t);
-          if (gpsEpoch > 0) {
+          Serial.println(gpsEpoch);
+          if (gpsEpoch > 1760817666) {
             struct timeval tv = { .tv_sec = gpsEpoch };
             settimeofday(&tv, nullptr);
             epoch_base = (int64_t)gpsEpoch;
@@ -277,6 +271,28 @@ void synctime_from_gps(){
   }
 }
 
+void restore_time_from_rtc(unsigned long start){
+  Serial.printf("Saved time from RTC: %lld\n", epoch_base);
+  if (epoch_base > 0) {
+    time_t restored = (time_t)(epoch_base + SLEEP_TIME + (start / 1000)); // Add sleep duration
+    struct timeval now = { .tv_sec = restored };
+    settimeofday(&now, nullptr);
+    Serial.printf("✅ Restored time from RTC: ");
+  } else {
+    Serial.printf("❌ No RTC time available: ");
+    struct timeval now { .tv_sec = epoch_base + (start / 1000)}; 
+    settimeofday(&now, nullptr);
+  }
+  struct tm timeinfo;
+  getLocalTime(&timeinfo);
+  char buffer[32];
+  strftime(buffer, sizeof(buffer), "%d.%m.%Y %H:%M:%S", &timeinfo);
+  Serial.println(buffer);
+  if (timeinfo.tm_min < 5 || (timeinfo.tm_year + 1900) < 2025) {
+    synctime_from_gps();
+  }
+}
+
 void setup() {
   Mcu.begin(HELTEC_BOARD,SLOW_CLK_TPYE);
   setCpuFrequencyMhz(80);
@@ -286,21 +302,10 @@ void setup() {
  // Set timezone
   setenv("TZ", TZ_INFO, 1);
   tzset();
-
+  unsigned long start = millis();
   Serial.begin(115200);
   VextON();
-  
-  if (epoch_base > 0) {
-    time_t restored = (time_t)(epoch_base + SLEEP_TIME); // Add sleep duration
-    struct timeval now = { .tv_sec = restored };
-    settimeofday(&now, nullptr);
-    Serial.println("✅ Restored time from RTC:");
-  } else {
-    Serial.println("❌ No RTC time available.");
-    struct timeval now { .tv_sec = epoch_base }; 
-    settimeofday(&now, nullptr);
-   }
-
+ 
   // Disable Bluetooth and WiFi completely
   btStop();
   esp_bt_controller_disable();
@@ -310,19 +315,8 @@ void setup() {
   flash_led();
   Serial.println("init >>> ");
   init_display();
-
-  char buffer[32];
-  struct tm timeinfo;
-  strftime(buffer, sizeof(buffer), "%H:%M:%S  %d.%m.%Y", &timeinfo);
-  Serial.println(buffer);
-  if (timeinfo.tm_min < 5) {
-    synctime_from_gps();
-  }
-  strftime(buffer, sizeof(buffer), "%H:%M:%S  %d.%m.%Y", &timeinfo);
-  Serial.println(buffer);
-
+  restore_time_from_rtc(start);
   sensors.begin();
-
   deviceCount = sensors.getDeviceCount();
   Serial.print("Gefundene Sensoren: ");
   Serial.println(deviceCount);
