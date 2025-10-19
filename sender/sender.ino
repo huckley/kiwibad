@@ -149,11 +149,11 @@ void enterDeepSleepForSecounds(uint32_t secounds) {
 }
 
 void init_display() {
-  pinMode(PIN_EINK_SCLK, OUTPUT); 
-  pinMode(PIN_EINK_DC, OUTPUT); 
+  pinMode(PIN_EINK_SCLK, OUTPUT);
+  pinMode(PIN_EINK_DC, OUTPUT);
   pinMode(PIN_EINK_CS, OUTPUT);
   pinMode(PIN_EINK_RES, OUTPUT);
-    
+
   // rest e-ink
   digitalWrite(PIN_EINK_RES, LOW);
   delay(20);
@@ -165,7 +165,7 @@ void init_display() {
 
   // write cmd
   uint8_t cmd = 0x2F;
-  pinMode(PIN_EINK_MOSI, OUTPUT);  
+  pinMode(PIN_EINK_MOSI, OUTPUT);
   digitalWrite(PIN_EINK_SCLK, LOW);
   for (int i = 0; i < 8; i++) {
     digitalWrite(PIN_EINK_MOSI, (cmd & 0x80) ? HIGH : LOW);
@@ -178,16 +178,16 @@ void init_display() {
   delay(10);
 
   digitalWrite(PIN_EINK_DC, HIGH);
-  pinMode(PIN_EINK_MOSI, INPUT_PULLUP); 
+  pinMode(PIN_EINK_MOSI, INPUT_PULLUP);
 
   // read chip ID
   uint8_t chipId = 0;
   for (int8_t b = 7; b >= 0; b--) {
-    digitalWrite(PIN_EINK_SCLK, LOW);  
+    digitalWrite(PIN_EINK_SCLK, LOW);
     delayMicroseconds(1);
     digitalWrite(PIN_EINK_SCLK, HIGH);
     delayMicroseconds(1);
-    if (digitalRead(PIN_EINK_MOSI)) chipId |= (1 << b);  
+    if (digitalRead(PIN_EINK_MOSI)) chipId |= (1 << b);
   }
   digitalWrite(PIN_EINK_CS, HIGH);
   if ((chipId &0x03) !=0x01) {
@@ -273,7 +273,7 @@ void restore_time_from_rtc(uint32_t start) {
     Serial.printf("✅ Restored time from RTC: ");
   } else {
     Serial.printf("❌ No RTC time available: ");
-    struct timeval now { .tv_sec = epoch_base + (start / 1000)}; 
+    struct timeval now { .tv_sec = epoch_base + (start / 1000)};
     settimeofday(&now, nullptr);
   }
   struct tm timeinfo;
@@ -291,14 +291,14 @@ void setup() {
   setCpuFrequencyMhz(80);
   analogSetAttenuation(ADC_11db);
   analogReadResolution(12);
- 
- // Set timezone
+
+  // Set timezone
   setenv("TZ", TZ_INFO, 1);
   tzset();
   uint32_t start = millis();
   Serial.begin(115200);
   VextON();
- 
+
   // Disable Bluetooth and WiFi completely
   btStop();
   esp_bt_controller_disable();
@@ -333,7 +333,7 @@ void setup() {
   waterTempC = sensors.getTempC(water_sensor_addr);
   Serial.print("Send mode: ");
   Serial.println(send_on_lora ? "LoRa (raw)" : "LoRaWAN (TTN)");
-  if (send_on_lora) {  
+  if (send_on_lora) {
     RadioEvents.TxDone = OnTxDone;
     RadioEvents.TxTimeout = OnTxTimeout;
 
