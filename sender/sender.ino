@@ -360,34 +360,14 @@ void printAddress(DeviceAddress deviceAddress) {
   Serial.println(devAddrHex);
 }
 
-void sendLoRaWithTempsAndBattery(float airTemp,float waterTemp, float batteryVoltage) {
-  // Format sensor addresses as hex
-  char airAddrStr[17];
-  char waterAddrStr[17];
-
-  snprintf(airAddrStr, sizeof(airAddrStr),
-    "%02X%02X%02X%02X%02X%02X%02X%02X",
-    air_sensor_addr[0], air_sensor_addr[1], air_sensor_addr[2], air_sensor_addr[3],
-    air_sensor_addr[4], air_sensor_addr[5], air_sensor_addr[6], air_sensor_addr[7]);
-
-  snprintf(waterAddrStr, sizeof(waterAddrStr),
-    "%02X%02X%02X%02X%02X%02X%02X%02X",
-    water_sensor_addr[0], water_sensor_addr[1], water_sensor_addr[2], water_sensor_addr[3],
-    water_sensor_addr[4], water_sensor_addr[5], water_sensor_addr[6], water_sensor_addr[7]);
+void sendLoRaWithTempsAndBattery(float airTemp, float waterTemp, float batteryVoltage) {
+  extern uint8_t devEui[8];  // Declared in the Heltec library
+  String devEuiStr = toHexString(devEui, sizeof(devEui));  // e.g., "ABCDEF1234567890"
 
   // Prepare LoRa payload
   snprintf(packet, BUFFER_SIZE,
-    "BAT:%.2fV|T1:%.1fC[%s]|T2:%.1fC[%s]",
-    batteryVoltage, airTemp, airAddrStr, waterTemp, waterAddrStr);
- 
-  char sigHex[17];  // 8 bytes * 2 + null terminator
-  if (!computeHMACSignature(packet, sigHex, sizeof(sigHex))) {
-    Serial.println("HMAC calculation failed");
-    return;
-  }
-
-  strncat(packet, "|SIG:", BUFFER_SIZE - strlen(packet) - 1);
-  strncat(packet, sigHex, BUFFER_SIZE - strlen(packet) - 1);
+    "D:%s|BAT:%.2f|T1:%.1f|T2:%.1f",
+    devEuiStr.c_str(), batteryVoltage, airTemp, waterTemp);
 
   Serial.println("Sending LoRa message:");
   Serial.println(packet);
