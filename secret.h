@@ -3,7 +3,7 @@
 #define HMAC_KEY "MySuperSecretKey123"  // Use a strong key
 
 /* OTAA para*/
-uint8_t devEui[] = { };
+uint8_t devEui[8] = { 0xDE, 0xAD, 0xBE, 0xEF, 0x12, 0x34, 0x56, 0x78 };  // example
 uint8_t appEui[] = { 0xD7, 0xF9, 0x79, 0x7A, 0x39, 0x42, 0xAD, 0x79 };
 uint8_t appKey[] = { 0xA7, 0x1B, 0xF6, 0x04, 0xB2, 0xB3, 0x50, 0xCA, 0x14, 0x21, 0xDF, 0xB9, 0xD1, 0xEA, 0x62, 0x4C };
 
@@ -40,7 +40,8 @@ bool computeHMACSignatureBinary(const uint8_t* message, size_t messageLen, uint8
   return true;
 }
 
-bool verifyHMACSignatureBinary(const uint8_t* payload, size_t payloadLen) {
+bool verifyHMACSignatureBinary(const uint8_t* payload) {
+  size_t payloadLen = sizeof(payload);
   if (payloadLen < 21) return false;  // Must be at least 13 + 8
 
   size_t messageLen = payloadLen - 8;

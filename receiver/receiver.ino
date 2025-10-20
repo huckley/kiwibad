@@ -1,12 +1,7 @@
 #include "LoRaWan_APP.h"
 #include "Arduino.h"
 #include "HT_SSD1306Wire.h"
-#include <WiFiManager.h>            // Wi-Fi auto config
 #include <time.h>
-
-// WiFiManager fallback AP name
-#define AP_NAME "LoRaNode-Setup"
-#define AP_PASSWORD "configureme"
 
 #include "../secret.h"
 #include "../lora.h"
@@ -25,68 +20,8 @@ void VextON() {
   pinMode(Vext, OUTPUT);
   digitalWrite(Vext, LOW); // LOW = ON
 }
-
-void apModeCallback(WiFiManager *wm) {
-  Serial.println("Entered AP Mode");
-  oled_display.clear();
-  oled_display.setFont(ArialMT_Plain_10);
-  oled_display.drawString(0, 0, "Config Portal");
-  oled_display.drawString(0, 14, AP_NAME);
-  oled_display.drawString(0, 28, "Connect to AP");
-  oled_display.drawString(0, 42, "Pass: " AP_PASSWORD);
-  oled_display.display();
-}
-
 void setup() {
   Serial.begin(115200);
-  // Start WiFiManager
-/*
-  WiFiManager wm;
-  wm.setAPCallback(apModeCallback);
-  WiFiManagerParameter custom_ntp_server("server", "ntp server", "pool.ntp.org", 40);
-  WiFi.mode(WIFI_STA); // explicitly set mode, esp defaults to STA+AP
-  wm.addParameter(&custom_ntp_server);
-  wm.setConfigPortalBlocking(true);
-  if (!wm.autoConnect(AP_NAME, AP_PASSWORD)) {
-    Serial.println("Failed to connect to WiFi");
-  } else {
-    Serial.println("WiFi connected.");
-    Serial.print("IP Address: ");
-    Serial.println(WiFi.localIP());
-  
-    // Sync time
-    const char* ntp_server = custom_ntp_server.getValue();
-    if (strlen(ntp_server) == 0) {
-      ntp_server = "pool.ntp.org";  // fallback
-    }
-    configTime(0, 0, ntp_server);
-    unsigned long startAttempt = millis();
-    const unsigned long timeout = 10000;  // 10 seconds
-
-    while (time(nullptr) < 100000) {
-      if (millis() - startAttempt > timeout) {
-        Serial.println("\n⏱️ NTP sync timeout!");
-        break;
-      }
-      delay(500);
-      Serial.print(".");
-    } 
-    Serial.println();
-  }
-  
-  setenv("TZ", "CET-1CEST,M3.5.0/2,M10.5.0/3", 1);
-  tzset();
-
-  time_t now = time(nullptr);
-  struct tm timeinfo;
-  localtime_r(&now, &timeinfo);
-
-  char timeStr[30];
-  strftime(timeStr, sizeof(timeStr), "%H:%M:%S %d.%m.%Y", &timeinfo);
-
-  Serial.print("Current time: ");
-  Serial.println(timeStr);
-*/
 
   // Board and Display Init
   Mcu.begin(HELTEC_BOARD, SLOW_CLK_TPYE);
@@ -124,61 +59,88 @@ void loop() {
   }
 }
 
-// === LoRa Packet Received ===
-void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr) {
-  memcpy(packet, payload, size);
-  packet[size] = '\0';
-  Radio.Sleep();
-
-  Serial.printf("Received: \"%s\"\n", packet);
-
-  if (!verifyHMACSignature(packet)) {
-    Serial.println("Invalid signature - ignoring packet");
-    state = STATE_RX;
-    return;
-  }
-
-  String message = String(packet);
-
-  float battery = parseValue(message, "BAT:", "V");
-  float tempAir = parseValue(message, "T1:", "C");
-  float tempWater = parseValue(message, "T2:", "C");
-
-  Serial.printf("Battery: %.2f V, Air: %.1f °C, Water: %.1f °C\n", battery, tempAir, tempWater);
-
-  // Display update
-  updateDisplay(battery, tempAir, tempWater);
-
-  state = STATE_RX; // Resume listening
-}
-
-// === Parse values like BAT:3.81V, T1:20.1C[...], T2:15.8C[...] ===
-float parseValue(String payload, String prefix, String stopChar) {
-  int start = payload.indexOf(prefix);
-  if (start == -1) return NAN;
-  start += prefix.length();
-  int end = payload.indexOf(stopChar, start);
-  if (end == -1) return NAN;
-  return payload.substring(start, end).toFloat();
-}
-
 // === OLED Display Update ===
-void updateDisplay(float battery, float tempAir, float tempWater) {
+void updateDisplay(float battery, float tempAir, float tempWater, uint8_t hour , uint8_t minute) {
   oled_display.clear();
   oled_display.setFont(ArialMT_Plain_10);
-
-  char timeStr[20];
-  time_t now;
-  struct tm timeinfo;
-  time(&now);
-  localtime_r(&now, &timeinfo);
-  snprintf(timeStr, sizeof(timeStr), "%02d:%02d:%02d", 
-           timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec);
 
   oled_display.drawString(0, 0, "LoRa Data:");
   oled_display.drawString(0, 12, "Air: " + String(tempAir, 1) + " °C");
   oled_display.drawString(0, 24, "Water: " + String(tempWater, 1) + " °C");
   oled_display.drawString(0, 36, "Battery: " + String(battery, 2) + " V");
-  oled_display.drawString(0, 50, "Time: " + String(timeStr));
+  oled_display.drawString(0, 50, "Time: " + String(hour) + ":" + "minute");
   oled_display.display();
+}
+
+// === LoRa Packet Received ===
+void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr) {
+  Radio.Sleep();
+
+  // Validate size
+  if (size != 24) {
+    Serial.println("Invalid payload length");
+    state = STATE_RX;
+    return;
+  }
+
+  // Copy payload to local buffer if needed
+  uint8_t packet[24];  // or use global if required
+  memcpy(packet, payload, size);
+
+  // Optional: only null-terminate for printing as string (only if it's known to be string)
+  // Not needed here since it's binary payload
+  // packet[size] = '\0';
+
+  // Optional: debug raw payload
+  Serial.print("Raw payload: ");
+  for (int i = 0; i < size; i++) {
+    Serial.printf("%02X ", packet[i]);
+  }
+  Serial.println();
+
+  // === VERIFY HMAC ===
+  if (!verifyHMACSignatureBinary(packet)) {
+    Serial.println("Invalid signature - ignoring packet");
+    state = STATE_RX;
+    return;
+  }
+
+  // === PARSE PAYLOAD ===
+
+  // 1. DevEUI
+  char devEuiStr[17];
+  for (int i = 0; i < 8; i++) {
+    sprintf(&devEuiStr[i * 2], "%02X", packet[i]);
+  }
+  devEuiStr[16] = '\0';
+
+  // 2. Time
+  uint8_t hour = packet[8];
+  uint8_t minute = packet[9];
+
+  // 3. Battery Voltage (millivolts → float volts)
+  uint16_t batteryRaw = (packet[10] << 8) | packet[11];
+  float batteryVoltage = batteryRaw / 1000.0f;
+
+  // 4. Air Temp
+  uint16_t airRaw = (packet[12] << 8) | packet[13];
+  float airTemp = (airRaw == 0xFFFF) ? NAN : (airRaw / 10.0f) - 40.0f;
+
+  // 5. Water Temp
+  uint16_t waterRaw = (packet[14] << 8) | packet[15];
+  float waterTemp = (waterRaw == 0xFFFF) ? NAN : (waterRaw / 10.0f) - 40.0f;
+
+  // === OUTPUT ===
+  Serial.println("---- LoRa Packet Received ----");
+  Serial.print("DevEUI: "); Serial.println(devEuiStr);
+  Serial.printf("Time   : %02d:%02d\n", hour, minute);
+  Serial.printf("Battery: %.3f V\n", batteryVoltage);
+  Serial.printf("Air    : %s\n", isnan(airTemp) ? "Error" : String(airTemp, 1).c_str());
+  Serial.printf("Water  : %s\n", isnan(waterTemp) ? "Error" : String(waterTemp, 1).c_str());
+
+  // 7. Update display (make sure variable names match!)
+  updateDisplay(batteryVoltage, airTemp, waterTemp, hour, minute);
+
+  // 8. Resume RX
+  state = STATE_RX;
 }

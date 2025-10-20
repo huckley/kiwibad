@@ -39,59 +39,72 @@ uint8_t confirmedNbTrials = 4;
 #define JOIN_TIMEOUT 300000  // Timeout for OTAA join in milliseconds (300 seconds)
 
 // LoRa event structure
-uint8_t payload[21];  // 13 bytes of data + 8-byte HMAC
+uint8_t payload[24];
 static RadioEvents_t RadioEvents;
 
 // Function prototypes for LoRa TX events
 void OnTxDone(void);
 void OnTxTimeout(void);
 
+uint16_t encodeTemp(float temp) {
+  if (temp <= -126.0f) return 0xFFFF;  // Error code (use 65535)
+  return constrain((int16_t)((temp + 40.0f) * 10.0f), 0, 1250);
+}
+
 static void prepareTxFrame(uint8_t port, float airTemp, float waterTemp, float batteryVoltage) {
-  int16_t airTempInt = (int16_t)(airTemp * 100);  // 2 bytes
-  int16_t waterTempInt = (int16_t)(waterTemp * 100);  // 2 bytes
+  uint16_t airTempInt = encodeTemp(airTemp);
+  uint16_t waterTempInt = encodeTemp(waterTemp);
   uint16_t battVoltInt = (uint16_t)(batteryVoltage * 1000);  // 2 bytes
 
   appDataSize = 6;  // 2 + 2 + 2 = 6 bytes
 
-  appData[0] = (airTempInt >> 8) & 0xFF;
-  appData[1] = airTempInt & 0xFF;
+  appData[0] = (battVoltInt >> 8) & 0xFF;
+  appData[1] = battVoltInt & 0xFF;
 
-  appData[2] = (waterTempInt >> 8) & 0xFF;
-  appData[3] = waterTempInt & 0xFF;
+  appData[2] = (airTempInt >> 8) & 0xFF;
+  appData[3] = airTempInt & 0xFF;
 
-  appData[4] = (battVoltInt >> 8) & 0xFF;
-  appData[5] = battVoltInt & 0xFF;
+  appData[4] = (waterTempInt >> 8) & 0xFF;
+  appData[5] = waterTempInt & 0xFF;
 }
 
 
 void sendLoRaWithTempsAndBattery(float airTemp, float waterTemp, float batteryVoltage) {
-  extern uint8_t devEui[8];
+  uint16_t airTempInt = encodeTemp(airTemp);
+  uint16_t waterTempInt = encodeTemp(waterTemp);
+  uint16_t battVoltInt = (uint16_t)(batteryVoltage * 1000);  // 2 bytes
+  time_t now = time(nullptr);
+  struct tm* timeinfo = localtime(&now);
  
   // 1. devEUI
   memcpy(payload, devEui, 8);
+  payload[8] = timeinfo->tm_hour;
+  payload[9] = timeinfo->tm_min;
 
-  // 2. battery (scaled 0-5V to 0–255)
-  payload[8] = constrain(batteryVoltage * 51.0f, 0, 255);
+  payload[10] = (battVoltInt >> 8) & 0xFF;
+  payload[11] = battVoltInt & 0xFF;
 
-  // 3. airTemp and waterTemp (-40 to +85)
-  payload[9] = constrain((int)(airTemp + 40), 0, 255);
-  payload[10] = constrain((int)(waterTemp + 40), 0, 255);
+  payload[12] = (airTempInt >> 8) & 0xFF;
+  payload[13] = airTempInt & 0xFF;
 
-  // 4. time
-  time_t now = time(nullptr);
-  struct tm* timeinfo = localtime(&now);
-  payload[11] = timeinfo->tm_hour;
-  payload[12] = timeinfo->tm_min;
+  payload[14] = (waterTempInt >> 8) & 0xFF;
+  payload[15] = waterTempInt & 0xFF;
 
   // 5. HMAC signature
   uint8_t signature[8];
-  if (!computeHMACSignatureBinary(payload, 13, signature, sizeof(signature))) {
+  if (!computeHMACSignatureBinary(payload, 15, signature, sizeof(signature))) {
     Serial.println("HMAC failed");
     return;
   }
 
-  memcpy(payload + 13, signature, 8);  // Append sig
-  Serial.println("payload");
+  memcpy(payload + 16, signature, 8);  // Append sig
+  Serial.print("Payload: ");
+  for (int i = 0; i < sizeof(payload); i++) {
+    Serial.print(payload[i], HEX);
+    Serial.print(" ");
+  }
+  Serial.println();  
   // 6. Send
   Radio.Send(payload, sizeof(payload));
 }
+
