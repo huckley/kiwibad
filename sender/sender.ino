@@ -217,7 +217,7 @@ void synctime_from_gps() {
 }
 
 void restore_time_from_rtc(uint32_t start) {
-  struct timeval now; 
+  struct timeval now;
   Serial.printf("Saved time from RTC: %lld\n", epoch_base);
   if (epoch_base > 0) {
     time_t restored = (time_t)(epoch_base + SLEEP_TIME + (start / 1000));  // Adjust for sleep duration

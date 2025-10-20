@@ -75,7 +75,7 @@ void sendLoRaWithTempsAndBattery(float airTemp, float waterTemp, float batteryVo
   uint16_t battVoltInt = (uint16_t)(batteryVoltage * 1000);  // 2 bytes
   time_t now = time(nullptr);
   struct tm* timeinfo = localtime(&now);
- 
+
   // 1. devEUI
   memcpy(payload, devEui, 8);
   payload[8] = timeinfo->tm_hour;
@@ -103,7 +103,7 @@ void sendLoRaWithTempsAndBattery(float airTemp, float waterTemp, float batteryVo
     Serial.print(payload[i], HEX);
     Serial.print(" ");
   }
-  Serial.println();  
+  Serial.println();
   // 6. Send
   Radio.Send(payload, sizeof(payload));
 }

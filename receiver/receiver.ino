@@ -18,8 +18,9 @@ SSD1306Wire  oled_display(0x3c, 500000, SDA_OLED, SCL_OLED, GEOMETRY_128_64, RST
 
 void VextON() {
   pinMode(Vext, OUTPUT);
-  digitalWrite(Vext, LOW); // LOW = ON
+  digitalWrite(Vext, LOW);  // LOW = ON
 }
+
 void setup() {
   Serial.begin(115200);
 
@@ -48,11 +49,11 @@ void setup() {
 void loop() {
   switch (state) {
     case STATE_RX:
-      Radio.Rx(0); // Listen for packets
+      Radio.Rx(0);  // Listen for packets
       state = LOWPOWER;
       break;
     case LOWPOWER:
-      Radio.IrqProcess(); // Check LoRa events
+      Radio.IrqProcess();  // Check LoRa events
       break;
     default:
       break;
@@ -77,7 +78,7 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr) {
   Radio.Sleep();
 
   // Validate size
-  if (size != PAYLOAD_LEN ) {
+  if (size != PAYLOAD_LEN) {
     Serial.println("Invalid payload length");
     state = STATE_RX;
     return;
