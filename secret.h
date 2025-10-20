@@ -1,6 +1,7 @@
 #include "mbedtls/md.h"
 
 #define HMAC_KEY "MySuperSecretKey123"  // Use a strong key
+#define PAYLOAD_LEN 24
 
 /* OTAA para*/
 uint8_t devEui[8] = { 0xDE, 0xAD, 0xBE, 0xEF, 0x12, 0x34, 0x56, 0x78 };  // example
@@ -36,27 +37,32 @@ bool computeHMACSignatureBinary(const uint8_t* message, size_t messageLen, uint8
 
   // Copy the first 8 bytes (64 bits) of the HMAC to output buffer
   memcpy(outSig, hmac, 8);
-
+  Serial.print("hmac: ");
+  for (int i = 0; i < 8; i++) {
+    Serial.print(hmac[i], HEX);
+    Serial.print(" ");
+  }
+  Serial.println();
   return true;
 }
 
 bool verifyHMACSignatureBinary(const uint8_t* payload) {
-  size_t payloadLen = sizeof(payload);
-  if (payloadLen < 21) return false;  // Must be at least 13 + 8
-
-  size_t messageLen = payloadLen - 8;
   const uint8_t* message = payload;
-  const uint8_t* receivedSig = payload + messageLen;
+  const uint8_t* receivedSig = payload + 16;
+
+  Serial.print(" receivedSig ");
+  for (int i = 0; i < 8; i++) {
+    Serial.print(receivedSig[i], HEX);
+    Serial.print(" ");
+  }
+  Serial.println();
 
   uint8_t expectedSig[8];
-  if (!computeHMACSignatureBinary(message, messageLen, expectedSig, sizeof(expectedSig))) {
+  if (!computeHMACSignatureBinary(message, 16, expectedSig, 8)) {
     return false;
   }
 
-  bool match = true;
-  if (receivedSig != expectedSig) {
-    match = false;
-  }
+  bool match = (memcmp(receivedSig, expectedSig, 8) == 0);
 
   return match;
 }

@@ -151,6 +151,8 @@ void init_display() {
 }
 
 void Navigation_bar(float airtempC) {
+  setenv("TZ", TZ_INFO, 1);
+  tzset();
   struct tm timeinfo;
   getLocalTime(&timeinfo);
   char buffer[32];
@@ -215,17 +217,21 @@ void synctime_from_gps() {
 }
 
 void restore_time_from_rtc(uint32_t start) {
+  struct timeval now; 
   Serial.printf("Saved time from RTC: %lld\n", epoch_base);
   if (epoch_base > 0) {
-    time_t restored = (time_t)(epoch_base + SLEEP_TIME + (start / 1000));  // Add sleep duration
-    struct timeval now = { .tv_sec = restored };
-    settimeofday(&now, nullptr);
-    Serial.printf("✅ Restored time from RTC: ");
+    time_t restored = (time_t)(epoch_base + SLEEP_TIME + (start / 1000));  // Adjust for sleep duration
+    now.tv_sec = restored;
+    now.tv_usec = 0;
+    Serial.print("✅ Restored time from RTC: ");
   } else {
-    Serial.printf("❌ No RTC time available: ");
-    struct timeval now { .tv_sec = epoch_base + (start / 1000)};
-    settimeofday(&now, nullptr);
+    // fallback if no valid epoch_base
+    time_t fallback_time = (time_t)(start / 1000);
+    now.tv_sec = fallback_time;
+    now.tv_usec = 0;
+    Serial.print("❌ No valid RTC time. Using uptime-based time: ");
   }
+  settimeofday(&now, nullptr);
   struct tm timeinfo;
   getLocalTime(&timeinfo);
   char buffer[32];
@@ -234,6 +240,8 @@ void restore_time_from_rtc(uint32_t start) {
   if (timeinfo.tm_min < 5 || (timeinfo.tm_year + 1900) < 2025) {
     synctime_from_gps();
   }
+  setenv("TZ", TZ_INFO, 1);
+  tzset();
 }
 
 void setup() {
@@ -242,9 +250,6 @@ void setup() {
   analogSetAttenuation(ADC_11db);
   analogReadResolution(12);
 
-  // Set timezone
-  setenv("TZ", TZ_INFO, 1);
-  tzset();
   uint32_t start = millis();
   Serial.begin(115200);
   VextON();

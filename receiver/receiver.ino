@@ -68,7 +68,7 @@ void updateDisplay(float battery, float tempAir, float tempWater, uint8_t hour ,
   oled_display.drawString(0, 12, "Air: " + String(tempAir, 1) + " °C");
   oled_display.drawString(0, 24, "Water: " + String(tempWater, 1) + " °C");
   oled_display.drawString(0, 36, "Battery: " + String(battery, 2) + " V");
-  oled_display.drawString(0, 50, "Time: " + String(hour) + ":" + "minute");
+  oled_display.drawString(0, 50, "Time: " + String(hour) + ":" + String(minute));
   oled_display.display();
 }
 
@@ -77,14 +77,14 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr) {
   Radio.Sleep();
 
   // Validate size
-  if (size != 24) {
+  if (size != PAYLOAD_LEN ) {
     Serial.println("Invalid payload length");
     state = STATE_RX;
     return;
   }
 
   // Copy payload to local buffer if needed
-  uint8_t packet[24];  // or use global if required
+  uint8_t packet[PAYLOAD_LEN];  // or use global if required
   memcpy(packet, payload, size);
 
   // Optional: only null-terminate for printing as string (only if it's known to be string)
@@ -135,8 +135,8 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr) {
   Serial.print("DevEUI: "); Serial.println(devEuiStr);
   Serial.printf("Time   : %02d:%02d\n", hour, minute);
   Serial.printf("Battery: %.3f V\n", batteryVoltage);
-  Serial.printf("Air    : %s\n", isnan(airTemp) ? "Error" : String(airTemp, 1).c_str());
-  Serial.printf("Water  : %s\n", isnan(waterTemp) ? "Error" : String(waterTemp, 1).c_str());
+  Serial.printf("Air    : %s\n", isnan(airTemp) ? "-127" : String(airTemp, 1).c_str());
+  Serial.printf("Water  : %s\n", isnan(waterTemp) ? "-127" : String(waterTemp, 1).c_str());
 
   // 7. Update display (make sure variable names match!)
   updateDisplay(batteryVoltage, airTemp, waterTemp, hour, minute);

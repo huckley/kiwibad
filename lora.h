@@ -39,7 +39,7 @@ uint8_t confirmedNbTrials = 4;
 #define JOIN_TIMEOUT 300000  // Timeout for OTAA join in milliseconds (300 seconds)
 
 // LoRa event structure
-uint8_t payload[24];
+uint8_t payload[PAYLOAD_LEN];
 static RadioEvents_t RadioEvents;
 
 // Function prototypes for LoRa TX events
@@ -92,7 +92,7 @@ void sendLoRaWithTempsAndBattery(float airTemp, float waterTemp, float batteryVo
 
   // 5. HMAC signature
   uint8_t signature[8];
-  if (!computeHMACSignatureBinary(payload, 15, signature, sizeof(signature))) {
+  if (!computeHMACSignatureBinary(payload, 16, signature, 8)) {
     Serial.println("HMAC failed");
     return;
   }
