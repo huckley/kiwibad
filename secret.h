@@ -1,69 +1,61 @@
 #include "mbedtls/md.h"
 
 #define HMAC_KEY "MySuperSecretKey123"  // Use a strong key
-#define HMAC_KEY_LEN (sizeof(HMAC_KEY) - 1)  // exclude null terminator
 
-bool computeHMACSignature(const char* message, char* sigHex, size_t sigHexSize) {
-  if (sigHexSize < 17) return false;  // Need at least 16 hex chars + null
+/* OTAA para*/
+uint8_t devEui[] = { };
+uint8_t appEui[] = { 0xD7, 0xF9, 0x79, 0x7A, 0x39, 0x42, 0xAD, 0x79 };
+uint8_t appKey[] = { 0xA7, 0x1B, 0xF6, 0x04, 0xB2, 0xB3, 0x50, 0xCA, 0x14, 0x21, 0xDF, 0xB9, 0xD1, 0xEA, 0x62, 0x4C };
+
+bool computeHMACSignatureBinary(const uint8_t* message, size_t messageLen, uint8_t* outSig, size_t outSigLen) {
+  if (outSigLen < 8) return false;  // Need at least 8 bytes for truncated signature
 
   mbedtls_md_context_t ctx;
   const mbedtls_md_info_t* info = mbedtls_md_info_from_type(MBEDTLS_MD_SHA256);
   if (!info) return false;
 
   mbedtls_md_init(&ctx);
-  if (mbedtls_md_setup(&ctx, info, 1) != 0) return false;
+  if (mbedtls_md_setup(&ctx, info, 1) != 0) {
+    mbedtls_md_free(&ctx);
+    return false;
+  }
 
-  if (mbedtls_md_hmac_starts(&ctx, (const unsigned char*)HMAC_KEY, HMAC_KEY_LEN) != 0) return false;
-  if (mbedtls_md_hmac_update(&ctx, (const unsigned char*)message, strlen(message)) != 0) return false;
+  if (mbedtls_md_hmac_starts(&ctx, (const unsigned char*)HMAC_KEY, (sizeof(HMAC_KEY) - 1)  ) != 0 ||
+      mbedtls_md_hmac_update(&ctx, message, messageLen) != 0) {
+    mbedtls_md_free(&ctx);
+    return false;
+  }
 
-  uint8_t hmac[32];
-  if (mbedtls_md_hmac_finish(&ctx, hmac) != 0) return false;
+  uint8_t hmac[32];  // Full SHA-256 HMAC output
+  if (mbedtls_md_hmac_finish(&ctx, hmac) != 0) {
+    mbedtls_md_free(&ctx);
+    return false;
+  }
 
   mbedtls_md_free(&ctx);
 
-  // Convert first 8 bytes to hex
-  for (int i = 0; i < 8; i++) {
-    sprintf(&sigHex[i * 2], "%02X", hmac[i]);
-  }
-  sigHex[16] = '\0'; // null-terminate
+  // Copy the first 8 bytes (64 bits) of the HMAC to output buffer
+  memcpy(outSig, hmac, 8);
 
   return true;
 }
 
-bool verifyHMACSignature(const char* payload) {
-  // Find "|SIG:" in payload
-  const char* sigPtr = strstr(payload, "|SIG:");
-  if (!sigPtr) {
-    Serial.println("No signature found");
+bool verifyHMACSignatureBinary(const uint8_t* payload, size_t payloadLen) {
+  if (payloadLen < 21) return false;  // Must be at least 13 + 8
+
+  size_t messageLen = payloadLen - 8;
+  const uint8_t* message = payload;
+  const uint8_t* receivedSig = payload + messageLen;
+
+  uint8_t expectedSig[8];
+  if (!computeHMACSignatureBinary(message, messageLen, expectedSig, sizeof(expectedSig))) {
     return false;
   }
 
-  // Extract received signature hex string (16 chars)
-  char receivedSig[17];
-  strncpy(receivedSig, sigPtr + 5, 16);
-  receivedSig[16] = '\0';
-
-  // Extract data before signature
-  int dataLen = sigPtr - payload;
-  char dataToVerify[dataLen + 1];
-  strncpy(dataToVerify, payload, dataLen);
-  dataToVerify[dataLen] = '\0';
-
-  // Compute HMAC signature for extracted data
-  char computedSig[17];
-  if (!computeHMACSignature(dataToVerify, computedSig, sizeof(computedSig))) {
-    Serial.println("Failed to compute HMAC");
-    return false;
+  bool match = true;
+  if (receivedSig != expectedSig) {
+    match = false;
   }
 
-  // Compare receivedSig and computedSig case-insensitive
-  for (int i = 0; i < 16; i++) {
-    if (toupper(receivedSig[i]) != toupper(computedSig[i])) {
-      Serial.println("Signature mismatch");
-      return false;
-    }
-  }
-
-  Serial.println("Signature verified!");
-  return true;
+  return match;
 }

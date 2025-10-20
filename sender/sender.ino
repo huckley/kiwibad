@@ -16,8 +16,8 @@
 
 ScreenDisplay *epaper_display;
 #include "battery.h"
-#include "../lora-settings.h"
 #include "../secret.h"
+#include "../lora.h"
 
 // ===============================
 // ONE WIRE Configuration
@@ -36,39 +36,6 @@ float waterTempC = 0;
 
 DeviceAddress air_sensor_addr   = { 0x28, 0xCE, 0xC8, 0x37, 0x00, 0x00, 0x00, 0x40 };
 DeviceAddress water_sensor_addr = { 0x28, 0xD7, 0xB9, 0xB3, 0x00, 0x00, 0x00, 0xFA };
-
-// ===============================
-// LoWAN Configuration
-// ===============================
-/* OTAA para*/
-uint8_t devEui[] = { 0x70, 0xB3, 0xD5, 0x7E, 0xD0, 0x06, 0x53, 0xC8 };
-uint8_t appEui[] = { 0xD7, 0xF9, 0x79, 0x7A, 0x39, 0x42, 0xAD, 0x79 };
-uint8_t appKey[] = { 0xA7, 0x1B, 0xF6, 0x04, 0xB2, 0xB3, 0x50, 0xCA, 0x14, 0x21, 0xDF, 0xB9, 0xD1, 0xEA, 0x62, 0x4C };
-/* ABP para*/
-uint8_t nwkSKey[] = { };
-uint8_t appSKey[] = { };
-uint32_t devAddr;
-/*LoraWan channelsmask, default channels 0-7*/
-uint16_t userChannelsMask[6] = { 0x00FF, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000 };
-#define LORAMAC_DEFAULT_RX2_FREQUENCY 869525000
-#define LORAMAC_DEFAULT_RX2_DR        DR_3
-
-/*LoraWan region, select in arduino IDE tools*/
-LoRaMacRegion_t loraWanRegion = ACTIVE_REGION;
-/*LoraWan Class, Class A and Class C are supported*/
-DeviceClass_t loraWanClass = CLASS_A;
-/*the application data transmission duty cycle.  value in [ms].*/
-uint32_t appTxDutyCycle = 15000*4*2;
-/*OTAA or ABP*/
-bool overTheAirActivation = true;
-/*ADR enable*/
-bool loraWanAdr = true;
-/* Indicates if the node is sending confirmed or unconfirmed messages */
-bool isTxConfirmed = true;
-/* Application port */
-uint8_t appPort = 2;
-uint8_t confirmedNbTrials = 4;
-#define JOIN_TIMEOUT 300000  // Timeout for OTAA join in milliseconds (300 seconds)
 uint32_t joinStartTime = 0;
 
 #define LED  45
@@ -78,7 +45,7 @@ uint32_t joinStartTime = 0;
 #define PIN_EINK_RES  3
 #define PIN_EINK_MOSI 6
 
-#define SLEEP_TIME 60              // Sleep time in secounds
+#define SLEEP_TIME 300              // Sleep time in secounds
 #define GPS_RX 43  // GPS TX -> ESP32 RX pin (GPIO 16)
 #define GPS_TX 44  // GPS RX -> ESP32 TX pin (GPIO 17)
 #define GPS_BAUD 9600
@@ -88,23 +55,6 @@ TinyGPSPlus GPS;
 
 RTC_DATA_ATTR int64_t epoch_base = 0;  // Full 64-bit epoch time
 RTC_DATA_ATTR bool send_on_lora = true;
-
-static void prepareTxFrame(uint8_t port, float airTemp, float waterTemp, float batteryVoltage) {
-  int16_t airTempInt = (int16_t)(airTemp * 100);  // 2 bytes
-  int16_t waterTempInt = (int16_t)(waterTemp * 100);  // 2 bytes
-  uint16_t battVoltInt = (uint16_t)(batteryVoltage * 1000);  // 2 bytes
-
-  appDataSize = 6;  // 2 + 2 + 2 = 6 bytes
-
-  appData[0] = (airTempInt >> 8) & 0xFF;
-  appData[1] = airTempInt & 0xFF;
-
-  appData[2] = (waterTempInt >> 8) & 0xFF;
-  appData[3] = waterTempInt & 0xFF;
-
-  appData[4] = (battVoltInt >> 8) & 0xFF;
-  appData[5] = battVoltInt & 0xFF;
-}
 
 void VextON(void) {
   pinMode(18, OUTPUT);
@@ -311,7 +261,6 @@ void setup() {
 #if(LORAWAN_DEVEUI_AUTO)
   LoRaWAN.generateDeveuiByChipID();
 #endif
-  printTTNParams();
   restore_time_from_rtc(start);
   sensors.begin();
   deviceCount = sensors.getDeviceCount();
@@ -360,20 +309,6 @@ void printAddress(DeviceAddress deviceAddress) {
   Serial.println(devAddrHex);
 }
 
-void sendLoRaWithTempsAndBattery(float airTemp, float waterTemp, float batteryVoltage) {
-  extern uint8_t devEui[8];  // Declared in the Heltec library
-  String devEuiStr = toHexString(devEui, sizeof(devEui));  // e.g., "ABCDEF1234567890"
-
-  // Prepare LoRa payload
-  snprintf(packet, BUFFER_SIZE,
-    "D:%s|BAT:%.2f|T1:%.1f|T2:%.1f",
-    devEuiStr.c_str(), batteryVoltage, airTemp, waterTemp);
-
-  Serial.println("Sending LoRa message:");
-  Serial.println(packet);
-  Radio.Send((uint8_t *)packet, strlen(packet));
-}
-
 String toHexString(const uint8_t* data, size_t len) {
   String result = "";
   for (size_t i = 0; i < len; i++) {
@@ -381,19 +316,6 @@ String toHexString(const uint8_t* data, size_t len) {
     result += String(data[i], HEX);
   }
   return result;
-}
-
-void printTTNParams() {
-  extern uint8_t devEui[8];  // Declared in the Heltec library
-
-  Serial.print("DevEUI: ");
-  Serial.println(toHexString(devEui, sizeof(devEui)));
-
-  Serial.print("JoinEUI: ");
-  Serial.println(toHexString(appEui, sizeof(appEui)));
-
-  Serial.print("AppKey: ");
-  Serial.println(toHexString(appKey, sizeof(appKey)));
 }
 
 void loop() {

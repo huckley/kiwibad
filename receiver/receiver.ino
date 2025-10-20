@@ -8,8 +8,8 @@
 #define AP_NAME "LoRaNode-Setup"
 #define AP_PASSWORD "configureme"
 
-#include "../lora-settings.h"
 #include "../secret.h"
+#include "../lora.h"
 
 typedef enum {
   LOWPOWER,
@@ -40,6 +40,7 @@ void apModeCallback(WiFiManager *wm) {
 void setup() {
   Serial.begin(115200);
   // Start WiFiManager
+/*
   WiFiManager wm;
   wm.setAPCallback(apModeCallback);
   WiFiManagerParameter custom_ntp_server("server", "ntp server", "pool.ntp.org", 40);
@@ -85,7 +86,7 @@ void setup() {
 
   Serial.print("Current time: ");
   Serial.println(timeStr);
-
+*/
 
   // Board and Display Init
   Mcu.begin(HELTEC_BOARD, SLOW_CLK_TPYE);
