@@ -45,7 +45,7 @@ uint32_t joinStartTime = 0;
 #define PIN_EINK_RES  3
 #define PIN_EINK_MOSI 6
 
-#define SLEEP_TIME 300              // Sleep time in secounds
+#define SLEEP_TIME   1800         // Sleep time in secounds
 #define GPS_RX 43  // GPS TX -> ESP32 RX pin (GPIO 16)
 #define GPS_TX 44  // GPS RX -> ESP32 TX pin (GPIO 17)
 #define GPS_BAUD 9600
@@ -87,12 +87,19 @@ void enterDeepSleepForSecounds(uint32_t secounds) {
 
   struct timeval now;
   gettimeofday(&now, nullptr);         // get current system time
-  epoch_base = (int64_t)now.tv_sec;    // save seconds part to RTC memory
-  Serial.printf("Saved time to RTC: %lld\n", epoch_base);
+  epoch_base = (int64_t)now.tv_sec + secounds ;    // save seconds part to RTC memory
+  time_t tnow = now.tv_sec;
+  struct tm *timeinfo = localtime(&tnow);
+  int current_hour = timeinfo->tm_hour;
+  if (current_hour > 20) {
+    epoch_base = 0;
+    secounds = 12*3600;
+  }
+  Serial.printf("Wakeup time to RTC: %lld\n", epoch_base);
   Serial.printf("going to sleep for %u sec...\n", secounds);
   // Enable wake-up timer
   Serial.flush();
-  send_on_lora = !send_on_lora;
+  // send_on_lora = !send_on_lora;
   esp_sleep_enable_timer_wakeup((uint64_t)secounds  * 1000000ULL);
   // Enter deep sleep
   esp_deep_sleep_start();
@@ -156,7 +163,7 @@ void Navigation_bar(float airtempC) {
   struct tm timeinfo;
   getLocalTime(&timeinfo);
   char buffer[32];
-  strftime(buffer, sizeof(buffer), "%H:%M:%S  %d.%m.%Y", &timeinfo);
+  strftime(buffer, sizeof(buffer), "%H:%M  %d.%m.%Y", &timeinfo);
   epaper_display->setTextAlignment(TEXT_ALIGN_LEFT);
   epaper_display->setFont(ArialMT_Plain_10);
   epaper_display->drawLine(0, 15, 250, 15);
@@ -220,7 +227,7 @@ void restore_time_from_rtc(uint32_t start) {
   struct timeval now;
   Serial.printf("Saved time from RTC: %lld\n", epoch_base);
   if (epoch_base > 0) {
-    time_t restored = (time_t)(epoch_base + SLEEP_TIME + (start / 1000));  // Adjust for sleep duration
+    time_t restored = (time_t)(epoch_base + (start / 1000));  // Adjust for sleep duration
     now.tv_sec = restored;
     now.tv_usec = 0;
     Serial.print("✅ Restored time from RTC: ");
@@ -237,7 +244,7 @@ void restore_time_from_rtc(uint32_t start) {
   char buffer[32];
   strftime(buffer, sizeof(buffer), "%d.%m.%Y %H:%M:%S", &timeinfo);
   Serial.println(buffer);
-  if (timeinfo.tm_min < 5 || (timeinfo.tm_year + 1900) < 2025) {
+  if (timeinfo.tm_hour % 2 == 0|| (timeinfo.tm_year + 1900) < 2025) {
     synctime_from_gps();
   }
   setenv("TZ", TZ_INFO, 1);
@@ -283,6 +290,7 @@ void setup() {
     }
   }
   sensors.requestTemperatures();
+  delay(1000);
   airTempC = sensors.getTempC(air_sensor_addr);
   waterTempC = sensors.getTempC(water_sensor_addr);
   Serial.print("Send mode: ");
