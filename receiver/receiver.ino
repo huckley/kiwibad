@@ -5,6 +5,12 @@
 
 #include "../secret.h"
 #include "../lora.h"
+#include "esp_bt.h"                 // ESP32 Bluetooth control (power saving)
+#include "esp_wifi.h"               // ESP32 WiFi control (power saving)
+
+#define buttonPin  0
+#define PIN_VBAT 1          // ADC-Pin für Batterie
+#define PIN_ADC_CTRL 37
 
 typedef enum {
   LOWPOWER,
@@ -23,16 +29,24 @@ void VextON() {
 
 void setup() {
   Serial.begin(115200);
+ 
+  // Disable Bluetooth and WiFi completely
+  btStop();
+  esp_bt_controller_disable();
+  esp_wifi_stop();
+  esp_wifi_deinit();
 
   // Board and Display Init
   Mcu.begin(HELTEC_BOARD, SLOW_CLK_TPYE);
+  pinMode(buttonPin, INPUT_PULLUP);
   VextON();
+  float voltage = getBatteryVoltage();
   oled_display.init();
   oled_display.setContrast(255);
-  oled_display.flipScreenVertically();
+  oled_display.screenRotate(ANGLE_0_DEGREE);
   oled_display.setFont(ArialMT_Plain_10);
   Serial.println("LoRa RX Listening...");
-  oled_display.drawString(0, 0, "LoRa RX Listening...");
+  oled_display.drawString(0, 0, "RX Listening... |Bat:" + String(voltage, 2));
   oled_display.display();
 
   // LoRa Init
@@ -60,16 +74,34 @@ void loop() {
   }
 }
 
+float getBatteryVoltage() {
+
+  // 1. Messschaltung aktivieren (GPIO 37 auf LOW)
+  digitalWrite(PIN_ADC_CTRL, LOW);
+  delay(10); // Kurz warten, bis sich die Spannung stabilisiert
+
+  // 2. Mehrere Messungen für einen stabileren Mittelwert
+  uint16_t rawValue = 0;
+  for(int i = 0; i < 10; i++) {
+    rawValue += analogRead(PIN_VBAT);
+    delay(2);
+  }
+  rawValue /= 10;
+
+  // 3. Messschaltung deaktivieren, um Strom zu sparen
+  digitalWrite(PIN_ADC_CTRL, HIGH);
+  return (float)rawValue * 3.3 / 4095.0 * 4.9;
+}
+
 // === OLED Display Update ===
 void updateDisplay(float battery, float tempAir, float tempWater, uint8_t hour , uint8_t minute) {
+  float voltage = getBatteryVoltage();
   oled_display.clear();
   oled_display.setFont(ArialMT_Plain_10);
-
-  oled_display.drawString(0, 0, "LoRa Data:");
-  oled_display.drawString(0, 12, "Air: " + String(tempAir, 1) + " °C");
-  oled_display.drawString(0, 24, "Water: " + String(tempWater, 1) + " °C");
-  oled_display.drawString(0, 36, "Battery: " + String(battery, 2) + " V");
-  oled_display.drawString(0, 50, "Time: " + String(hour) + ":" + String(minute));
+  oled_display.drawString(0, 0, "Time: " + String(hour) + ":" + String(minute) + "|B: " + String(voltage, 2) +"|B: " + String(battery, 2) + " V");
+  oled_display.setFont(ArialMT_Plain_24);
+  oled_display.drawString(0, 10, "L: " + String(tempAir, 1) + "°C");
+  oled_display.drawString(0, 34, "W: " + String(tempWater, 1) + "°C");
   oled_display.display();
 }
 
