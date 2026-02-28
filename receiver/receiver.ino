@@ -40,6 +40,12 @@ void setup() {
   Mcu.begin(HELTEC_BOARD, SLOW_CLK_TPYE);
   pinMode(buttonPin, INPUT_PULLUP);
   VextON();
+  analogReadResolution(12);
+  // Set pin 37 as an output pin (used for ADC control):
+  pinMode(PIN_ADC_CTRL, OUTPUT);
+  // Set pin 37 to HIGH (enable ADC control):
+  digitalWrite(PIN_ADC_CTRL, HIGH);
+
   float voltage = getBatteryVoltage();
   oled_display.init();
   oled_display.setContrast(255);
@@ -75,22 +81,8 @@ void loop() {
 }
 
 float getBatteryVoltage() {
-
-  // 1. Messschaltung aktivieren (GPIO 37 auf LOW)
-  digitalWrite(PIN_ADC_CTRL, LOW);
-  delay(10); // Kurz warten, bis sich die Spannung stabilisiert
-
-  // 2. Mehrere Messungen für einen stabileren Mittelwert
-  uint16_t rawValue = 0;
-  for(int i = 0; i < 10; i++) {
-    rawValue += analogRead(PIN_VBAT);
-    delay(2);
-  }
-  rawValue /= 10;
-
-  // 3. Messschaltung deaktivieren, um Strom zu sparen
-  digitalWrite(PIN_ADC_CTRL, HIGH);
-  return (float)rawValue * 3.3 / 4095.0 * 4.9;
+  int analogVolts = analogReadMilliVolts(PIN_VBAT);
+  return (float)analogVolts * 490 / 100000;
 }
 
 // === OLED Display Update ===
