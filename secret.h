@@ -1,7 +1,7 @@
 #include "mbedtls/md.h"
 
 #define HMAC_KEY "MySuperSecretKey123"  // Use a strong key
-#define PAYLOAD_LEN 24
+#define PAYLOAD_LEN 18
 
 /* OTAA para*/
 uint8_t devEui[8] = { 0xDE, 0xAD, 0xBE, 0xEF, 0x12, 0x34, 0x56, 0x78 };  // example
@@ -36,9 +36,9 @@ bool computeHMACSignatureBinary(const uint8_t* message, size_t messageLen, uint8
   mbedtls_md_free(&ctx);
 
   // Copy the first 8 bytes (64 bits) of the HMAC to output buffer
-  memcpy(outSig, hmac, 8);
+  memcpy(outSig, hmac, outSigLen);
   Serial.print("hmac: ");
-  for (int i = 0; i < 8; i++) {
+  for (int i = 0; i < outSigLen; i++) {
     Serial.print(hmac[i], HEX);
     Serial.print(" ");
   }
