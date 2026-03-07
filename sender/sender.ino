@@ -31,11 +31,17 @@ DallasTemperature sensors(&oneWire);
 #define MAX_SENSORS 2
 DeviceAddress sensorAddresses[MAX_SENSORS];
 int deviceCount = 0;
-float airTempC = 0;
-float waterTempC = 0;
+float airTempC = -127;
+float waterTempC = -127;
+uint8_t sensorIDs[] = {0, 0};
+float temps[] = {-127,-127};
 
-DeviceAddress air_sensor_addr   = { 0x28, 0xCE, 0xC8, 0x37, 0x00, 0x00, 0x00, 0x40 };
-DeviceAddress water_sensor_addr = { 0x28, 0xD7, 0xB9, 0xB3, 0x00, 0x00, 0x00, 0xFA };
+DeviceAddress air_sensor_addr[]   = {{ 0x28, 0xD7, 0xB9, 0xB3, 0x00, 0x00, 0x00, 0xFA },
+                                     ( 0x28, 0x6e, 0x85, 0x50, 0x00, 0x00, 0x00, 0x0f )};
+DeviceAddress water_sensor_addr[] = {{ 0x28, 0xCE, 0xC8, 0x37, 0x00, 0x00, 0x00, 0x40 },
+                                     { 0x28, 0xDC, 0x27, 0x38, 0x00, 0x00, 0x00, 0x5a }};
+
+
 uint32_t joinStartTime = 0;
 
 #define LED  45
@@ -45,7 +51,8 @@ uint32_t joinStartTime = 0;
 #define PIN_EINK_RES  3
 #define PIN_EINK_MOSI 6
 
-#define SLEEP_TIME   1800         // Sleep time in secounds
+#define SLEEP_TIME   1800        // Sleep time in secounds
+#define NIGHT_SLEEP_TIME 12       // Sleep time in the night in hours
 #define GPS_RX 43  // GPS TX -> ESP32 RX pin (GPIO 16)
 #define GPS_TX 44  // GPS RX -> ESP32 TX pin (GPIO 17)
 #define GPS_BAUD 9600
@@ -93,7 +100,7 @@ void enterDeepSleepForSecounds(uint32_t secounds) {
   int current_hour = timeinfo->tm_hour;
   if (current_hour > 20) {
     epoch_base = 0;
-    secounds = 12*3600;
+    secounds = NIGHT_SLEEP_TIME*3600;
   }
   Serial.printf("Wakeup time to RTC: %lld\n", epoch_base);
   Serial.printf("going to sleep for %u sec...\n", secounds);
@@ -275,24 +282,37 @@ void setup() {
 #endif
   restore_time_from_rtc(start);
   sensors.begin();
+  sensors.setResolution(TEMPERATURE_PRECISION);
   deviceCount = sensors.getDeviceCount();
   Serial.print("Gefundene Sensoren: ");
   Serial.println(deviceCount);
+  sensors.requestTemperatures();
+  delay(1000);
   for (int i = 0; i < deviceCount && i < MAX_SENSORS; i++) {
     if (sensors.getAddress(sensorAddresses[i], i)) {
       Serial.print("Sensor ");
       Serial.print(i);
       Serial.print(" Adresse: ");
       printAddress(sensorAddresses[i]);
-      sensors.setResolution(sensorAddresses[i], TEMPERATURE_PRECISION);
+      Serial.print(" Temp: ");
+      float tempC = sensors.getTempCByIndex(i);
+      Serial.println(tempC);
+      sensorIDs[i] = getshortaddr(sensorAddresses[i]);
+      temps[i] = tempC;
+      for (int j = 0; j < (sizeof(air_sensor_addr) / sizeof(air_sensor_addr[0])); j++) {
+        if (memcmp(air_sensor_addr[j], sensorAddresses[i], 8) == 0) {
+          airTempC = tempC;
+        }
+      }
+      for (int j = 0; j < (sizeof(water_sensor_addr) / sizeof(water_sensor_addr[0])); j++) {
+        if (memcmp(water_sensor_addr[j], sensorAddresses[i], 8) == 0) {
+          waterTempC = tempC;
+        }
+      }
     } else {
       Serial.println("Sensor " + String(i) + " hat keine gültige Adresse.");
     }
   }
-  sensors.requestTemperatures();
-  delay(1000);
-  airTempC = sensors.getTempC(air_sensor_addr);
-  waterTempC = sensors.getTempC(water_sensor_addr);
   Serial.print("Send mode: ");
   Serial.println(send_on_lora ? "LoRa (raw)" : "LoRaWAN (TTN)");
   if (send_on_lora) {
@@ -314,12 +334,20 @@ void setup() {
   Serial.println(tempStr);
   epaper_display->drawString(125, 40, tempStr);
   update_display();
-  sendLoRaWithTempsAndBattery(airTempC, waterTempC, batteryVoltage);
+  sendLoRaWithTempsAndBattery(sensorIDs,temps, batteryVoltage);
+}
+
+char getshortaddr(DeviceAddress addr) {
+  uint8_t sum = 0;
+  for (uint8_t i = 0; i < 8; i++) {
+    sum += addr[i];
+  }
+  return sum;
 }
 
 void printAddress(DeviceAddress deviceAddress) {
   String devAddrHex = toHexString(deviceAddress, 8);
-  Serial.println(devAddrHex);
+  Serial.print(devAddrHex);
 }
 
 String toHexString(const uint8_t* data, size_t len) {
