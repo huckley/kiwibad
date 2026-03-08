@@ -68,36 +68,36 @@ static void prepareTxFrame(uint8_t port, float airTemp, float waterTemp, float b
   appData[5] = waterTempInt & 0xFF;
 }
 
-
-void sendLoRaWithTempsAndBattery(float airTemp, float waterTemp, float batteryVoltage) {
-  uint16_t airTempInt = encodeTemp(airTemp);
-  uint16_t waterTempInt = encodeTemp(waterTemp);
+void sendLoRaWithTempsAndBattery( uint8_t* sensorIDs, float* temps, float batteryVoltage) {
+  uint16_t TempInt[2]; 
+  TempInt[0] = encodeTemp(temps[0]);
+  TempInt[1] = encodeTemp(temps[1]);
   uint16_t battVoltInt = (uint16_t)(batteryVoltage * 1000);  // 2 bytes
   time_t now = time(nullptr);
   struct tm* timeinfo = localtime(&now);
 
-  // 1. devEUI
-  memcpy(payload, devEui, 8);
-  payload[8] = timeinfo->tm_hour;
-  payload[9] = timeinfo->tm_min;
+  payload[0] = sensorIDs[0];
+  payload[1] = sensorIDs[1];
+  payload[2] = timeinfo->tm_hour;
+  payload[3] = timeinfo->tm_min;
 
-  payload[10] = (battVoltInt >> 8) & 0xFF;
-  payload[11] = battVoltInt & 0xFF;
+  payload[4] = (battVoltInt >> 8) & 0xFF;
+  payload[5] = battVoltInt & 0xFF;
 
-  payload[12] = (airTempInt >> 8) & 0xFF;
-  payload[13] = airTempInt & 0xFF;
+  payload[6] = (TempInt[0] >> 8) & 0xFF;
+  payload[7] = TempInt[0] & 0xFF;
 
-  payload[14] = (waterTempInt >> 8) & 0xFF;
-  payload[15] = waterTempInt & 0xFF;
+  payload[8] = (TempInt[1] >> 8) & 0xFF;
+  payload[9] = TempInt[1] & 0xFF;
 
   // 5. HMAC signature
-  uint8_t signature[8];
-  if (!computeHMACSignatureBinary(payload, 16, signature, 8)) {
+  uint8_t signature[SIG_LEN];
+  if (!computeHMACSignatureBinary(payload, MSG_LEN, signature, SIG_LEN)) {
     Serial.println("HMAC failed");
     return;
   }
 
-  memcpy(payload + 16, signature, 8);  // Append sig
+  memcpy(payload + MSG_LEN, signature, SIG_LEN);  // Append sig
   Serial.print("Payload: ");
   for (int i = 0; i < sizeof(payload); i++) {
     Serial.print(payload[i], HEX);

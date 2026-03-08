@@ -7,10 +7,13 @@
 #include "../lora.h"
 #include "esp_bt.h"                 // ESP32 Bluetooth control (power saving)
 #include "esp_wifi.h"               // ESP32 WiFi control (power saving)
+#include "../sensors.h"
 
 #define buttonPin  0
-#define PIN_VBAT 1          // ADC-Pin für Batterie
-#define PIN_ADC_CTRL 37
+#define BATTERY_PIN 1        // GPIO 1
+#define ADC_CTRL 37          // GPIO 37
+#define ADC_CTRL_ENABLED LOW // Aktivierung bei LOW
+#define ADC_MULTIPLIER (4.9 * 1.045) // Effektiver Multiplier: 5.1205
 
 typedef enum {
   LOWPOWER,
@@ -18,6 +21,21 @@ typedef enum {
 } States_t;
 
 States_t state;
+
+struct Measurement {
+  uint8_t address1;
+  uint8_t address2;
+  uint8_t hour;
+  uint8_t minute;
+  float temperature1;
+  float temperature2;
+  float batteryVoltage; 
+};
+
+const int MAX_ENTRIES = 5;
+Measurement rrdBuffer[MAX_ENTRIES];
+int head = 0;
+int displayhead = 0;
 
 // ==== OLED ====
 SSD1306Wire  oled_display(0x3c, 500000, SDA_OLED, SCL_OLED, GEOMETRY_128_64, RST_OLED);
@@ -41,20 +59,20 @@ void setup() {
   pinMode(buttonPin, INPUT_PULLUP);
   VextON();
   analogReadResolution(12);
-  // Set pin 37 as an output pin (used for ADC control):
-  pinMode(PIN_ADC_CTRL, OUTPUT);
-  // Set pin 37 to HIGH (enable ADC control):
-  digitalWrite(PIN_ADC_CTRL, HIGH);
-
+  //analogSetAttenuation();
+  pinMode(ADC_CTRL, OUTPUT);
+  digitalWrite(ADC_CTRL, !ADC_CTRL_ENABLED);
+  
   float voltage = getBatteryVoltage();
   oled_display.init();
   oled_display.setContrast(255);
   oled_display.screenRotate(ANGLE_0_DEGREE);
   oled_display.setFont(ArialMT_Plain_10);
+  
   Serial.println("LoRa RX Listening...");
   oled_display.drawString(0, 0, "RX Listening... |Bat:" + String(voltage, 2));
   oled_display.display();
-
+ 
   // LoRa Init
   RadioEvents.RxDone = OnRxDone;
   Radio.Init(&RadioEvents);
@@ -81,20 +99,50 @@ void loop() {
 }
 
 float getBatteryVoltage() {
-  int analogVolts = analogReadMilliVolts(PIN_VBAT);
-  return (float)analogVolts * 490 / 100000;
+  int analogVolts = analogReadMilliVolts(1);
+  return analogVolts * 490 / 100000;
 }
 
 // === OLED Display Update ===
-void updateDisplay(float battery, float tempAir, float tempWater, uint8_t hour , uint8_t minute) {
+void updateDisplay(int myhead) {
   float voltage = getBatteryVoltage();
+  float airTempC = NAN;
+  float waterTempC = NAN; 
   oled_display.clear();
   oled_display.setFont(ArialMT_Plain_10);
-  oled_display.drawString(0, 0, "Time: " + String(hour) + ":" + String(minute) + "|B: " + String(voltage, 2) +"|B: " + String(battery, 2) + " V");
+  oled_display.drawString(0, 0, "Time: " + String(rrdBuffer[myhead].hour) + ":" + String(rrdBuffer[myhead].minute) + "|B: " + String(voltage, 2) +"|B: " + String(rrdBuffer[myhead].batteryVoltage, 2) + " V");
   oled_display.setFont(ArialMT_Plain_24);
-  oled_display.drawString(0, 10, "L: " + String(tempAir, 1) + "°C");
-  oled_display.drawString(0, 34, "W: " + String(tempWater, 1) + "°C");
+  for (int j = 0; j < (sizeof(air_sensor_addr) / sizeof(air_sensor_addr[0])); j++) {
+    if ( rrdBuffer[myhead].address1 == getshortaddr(air_sensor_addr[j]) )  {
+      airTempC = rrdBuffer[myhead].temperature1;
+    }
+    if ( rrdBuffer[myhead].address2 == getshortaddr(air_sensor_addr[j]) )  {
+      airTempC = rrdBuffer[myhead].temperature2;
+    }
+  }
+  for (int j = 0; j < (sizeof(water_sensor_addr) / sizeof(water_sensor_addr[0])); j++) {
+    if ( rrdBuffer[myhead].address1 == getshortaddr(water_sensor_addr[j]) )  {
+      waterTempC = rrdBuffer[myhead].temperature1;
+    }
+    if ( rrdBuffer[myhead].address2 == getshortaddr(water_sensor_addr[j]) )  {
+      waterTempC = rrdBuffer[myhead].temperature2;
+    }
+  }
+  oled_display.drawString(0, 10, "L: " + String(airTempC, 1) + "°C");
+  oled_display.drawString(0, 34, "W: " + String(waterTempC, 1) + "°C");
   oled_display.display();
+}
+
+void storeData(uint8_t addr1, uint8_t addr2, uint8_t hour, uint8_t minute, float temp1, float temp2, float batV) {
+  rrdBuffer[head].hour = hour;
+  rrdBuffer[head].minute = minute;
+  rrdBuffer[head].address1 = addr1;
+  rrdBuffer[head].address2 = addr2;
+  rrdBuffer[head].temperature1 = temp1;
+  rrdBuffer[head].temperature2 = temp2;
+  rrdBuffer[head].batteryVoltage = batV;
+  displayhead = head;
+  head = (head + 1) % MAX_ENTRIES;
 }
 
 // === LoRa Packet Received ===
@@ -109,12 +157,8 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr) {
   }
 
   // Copy payload to local buffer if needed
-  uint8_t packet[PAYLOAD_LEN];  // or use global if required
+  uint8_t packet[PAYLOAD_LEN]; 
   memcpy(packet, payload, size);
-
-  // Optional: only null-terminate for printing as string (only if it's known to be string)
-  // Not needed here since it's binary payload
-  // packet[size] = '\0';
 
   // Optional: debug raw payload
   Serial.print("Raw payload: ");
@@ -131,41 +175,29 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr) {
   }
 
   // === PARSE PAYLOAD ===
+  uint8_t sensorID1 = packet[0];
+  uint8_t sensorID2 = packet[1];
 
-  // 1. DevEUI
-  char devEuiStr[17];
-  for (int i = 0; i < 8; i++) {
-    sprintf(&devEuiStr[i * 2], "%02X", packet[i]);
-  }
-  devEuiStr[16] = '\0';
+  uint8_t hour = packet[2];
+  uint8_t minute = packet[3];
 
-  // 2. Time
-  uint8_t hour = packet[8];
-  uint8_t minute = packet[9];
-
-  // 3. Battery Voltage (millivolts → float volts)
-  uint16_t batteryRaw = (packet[10] << 8) | packet[11];
+  uint16_t batteryRaw = (packet[4] << 8) | packet[5];
   float batteryVoltage = batteryRaw / 1000.0f;
+  
+  uint16_t temp1Raw = (packet[6] << 8) | packet[7];
+  float temp1 = (temp1Raw == 0xFFFF) ? NAN : (temp1Raw / 10.0f) - 40.0f;
+  uint16_t temp2Raw = (packet[8] << 8) | packet[9];
+  float temp2 = (temp2Raw == 0xFFFF) ? NAN : (temp2Raw / 10.0f) - 40.0f;
 
-  // 4. Air Temp
-  uint16_t airRaw = (packet[12] << 8) | packet[13];
-  float airTemp = (airRaw == 0xFFFF) ? NAN : (airRaw / 10.0f) - 40.0f;
-
-  // 5. Water Temp
-  uint16_t waterRaw = (packet[14] << 8) | packet[15];
-  float waterTemp = (waterRaw == 0xFFFF) ? NAN : (waterRaw / 10.0f) - 40.0f;
-
+  storeData(sensorID1, sensorID2, hour, minute, temp1, temp2, batteryVoltage); 
   // === OUTPUT ===
   Serial.println("---- LoRa Packet Received ----");
-  Serial.print("DevEUI: "); Serial.println(devEuiStr);
+  Serial.printf("SensorID: %02X:%02X\n", sensorID1, sensorID2);
   Serial.printf("Time   : %02d:%02d\n", hour, minute);
   Serial.printf("Battery: %.3f V\n", batteryVoltage);
-  Serial.printf("Air    : %s\n", isnan(airTemp) ? "-127" : String(airTemp, 1).c_str());
-  Serial.printf("Water  : %s\n", isnan(waterTemp) ? "-127" : String(waterTemp, 1).c_str());
-
-  // 7. Update display (make sure variable names match!)
-  updateDisplay(batteryVoltage, airTemp, waterTemp, hour, minute);
-
-  // 8. Resume RX
+  Serial.printf("Temp1  : %s\n", isnan(temp1) ? "-127" : String(temp1, 1).c_str());
+  Serial.printf("Temp2  : %s\n", isnan(temp2) ? "-127" : String(temp2, 1).c_str());
+  updateDisplay(displayhead);  
+  
   state = STATE_RX;
 }
