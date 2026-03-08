@@ -1,8 +1,6 @@
 #include <time.h>
 #include "Arduino.h"
 #include "LoRaWan_APP.h"
-#include <OneWire.h>
-#include <DallasTemperature.h>
 #include "HT_lCMEN2R13EFC1.h"
 #include <driver/gpio.h>
 #include <driver/rtc_io.h>
@@ -18,6 +16,7 @@ ScreenDisplay *epaper_display;
 #include "battery.h"
 #include "../secret.h"
 #include "../lora.h"
+#include "../sensors.h"
 
 // ===============================
 // ONE WIRE Configuration
@@ -28,19 +27,12 @@ ScreenDisplay *epaper_display;
 OneWire oneWire(ONE_WIRE_BUS);
 DallasTemperature sensors(&oneWire);
 
-#define MAX_SENSORS 2
 DeviceAddress sensorAddresses[MAX_SENSORS];
 int deviceCount = 0;
 float airTempC = -127;
 float waterTempC = -127;
 uint8_t sensorIDs[] = {0, 0};
 float temps[] = {-127,-127};
-
-DeviceAddress air_sensor_addr[]   = {{ 0x28, 0xD7, 0xB9, 0xB3, 0x00, 0x00, 0x00, 0xFA },
-                                     { 0x28, 0x6e, 0x85, 0x50, 0x00, 0x00, 0x00, 0x0f }};
-DeviceAddress water_sensor_addr[] = {{ 0x28, 0xCE, 0xC8, 0x37, 0x00, 0x00, 0x00, 0x40 },
-                                     { 0x28, 0xDC, 0x27, 0x38, 0x00, 0x00, 0x00, 0x5a }};
-
 
 uint32_t joinStartTime = 0;
 
@@ -335,14 +327,6 @@ void setup() {
   epaper_display->drawString(125, 40, tempStr);
   update_display();
   sendLoRaWithTempsAndBattery(sensorIDs,temps, batteryVoltage);
-}
-
-char getshortaddr(DeviceAddress addr) {
-  uint8_t sum = 0;
-  for (uint8_t i = 0; i < 8; i++) {
-    sum += addr[i];
-  }
-  return sum;
 }
 
 void printAddress(DeviceAddress deviceAddress) {
