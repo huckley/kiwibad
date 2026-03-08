@@ -99,16 +99,8 @@ void loop() {
 }
 
 float getBatteryVoltage() {
-  digitalWrite(ADC_CTRL, ADC_CTRL_ENABLED);
-  delay(10);
-  uint32_t raw = 0;
-  for(int i = 0; i < 16; i++) {
-    raw += analogRead(BATTERY_PIN);
-  }
-  float rawAvg = raw / 16.0;
-  digitalWrite(ADC_CTRL, !ADC_CTRL_ENABLED);
-  float voltage = (rawAvg / 4095.0) * 1.25 * ADC_MULTIPLIER;
-  return voltage;
+  int analogVolts = analogReadMilliVolts(1);
+  return analogVolts * 490 / 100000;
 }
 
 // === OLED Display Update ===
