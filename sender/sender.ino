@@ -174,7 +174,7 @@ void Navigation_bar(float airtempC) {
   epaper_display->setTextAlignment(TEXT_ALIGN_LEFT);
   epaper_display->setFont(ArialMT_Plain_10);
   epaper_display->drawLine(0, 15, 250, 15);
-  String line_one = "Luft: " + String(airtempC, 2) + "°C | " + buffer;
+  String line_one = "Luft: " + String(airtempC, 1) + "°C | " + buffer;
   Serial.println(line_one);
   epaper_display->drawString(0, 0, line_one);
   battery();
@@ -330,7 +330,7 @@ void setup() {
   Navigation_bar(airTempC);
   epaper_display->setTextAlignment(TEXT_ALIGN_CENTER);
   epaper_display->setFont(Monospaced_bold_50);
-  String tempStr = String(waterTempC, 0) + "°C";
+  String tempStr = String(waterTempC, 1) + "°C";
   Serial.println(tempStr);
   epaper_display->drawString(125, 40, tempStr);
   update_display();
