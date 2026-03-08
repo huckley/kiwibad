@@ -91,13 +91,13 @@ void sendLoRaWithTempsAndBattery( uint8_t* sensorIDs, float* temps, float batter
   payload[9] = TempInt[1] & 0xFF;
 
   // 5. HMAC signature
-  uint8_t signature[8];
-  if (!computeHMACSignatureBinary(payload, 10, signature, 8)) {
+  uint8_t signature[SIG_LEN];
+  if (!computeHMACSignatureBinary(payload, 10, signature, SIG_LEN)) {
     Serial.println("HMAC failed");
     return;
   }
 
-  memcpy(payload + 10, signature, 8);  // Append sig
+  memcpy(payload + 10, signature, SIG_LEN);  // Append sig
   Serial.print("Payload: ");
   for (int i = 0; i < sizeof(payload); i++) {
     Serial.print(payload[i], HEX);
