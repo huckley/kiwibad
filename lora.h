@@ -107,4 +107,3 @@ void sendLoRaWithTempsAndBattery( uint8_t* sensorIDs, float* temps, float batter
   // 6. Send
   Radio.Send(payload, sizeof(payload));
 }
-
