@@ -8,12 +8,27 @@
 #include "esp_bt.h"                 // ESP32 Bluetooth control (power saving)
 #include "esp_wifi.h"               // ESP32 WiFi control (power saving)
 #include "../sensors.h"
+// ==== OLED ====
+SSD1306Wire  oled_display(0x3c, 500000, SDA_OLED, SCL_OLED, GEOMETRY_128_64, RST_OLED);
+#include "battery.h"
 
-#define buttonPin  0
-#define BATTERY_PIN 1        // GPIO 1
-#define ADC_CTRL 37          // GPIO 37
-#define ADC_CTRL_ENABLED LOW // Aktivierung bei LOW
-#define ADC_MULTIPLIER (4.9 * 1.045) // Effektiver Multiplier: 5.1205
+#define buttonPin 0
+volatile bool buttonPressed = false;
+unsigned long lastActivityTime = 0;
+bool displayOn = true;
+const unsigned long DISPLAY_TIMEOUT = 5 * 60 * 1000; // 5 Minuten in ms
+volatile unsigned long lastButtonTime = 0; // Zeitstempel für Entprellung
+const unsigned long DEBOUNCE_DELAY = 250;  // 250ms Sperrzeit
+
+// ISR für den Button
+void IRAM_ATTR handleButton() {
+  unsigned long currentTime = millis();
+  // Nur akzeptieren, wenn der letzte Klick länger als DEBOUNCE_DELAY her ist
+  if (currentTime - lastButtonTime > DEBOUNCE_DELAY) {
+    buttonPressed = true;
+    lastButtonTime = currentTime;
+  }
+}
 
 typedef enum {
   LOWPOWER,
@@ -37,12 +52,14 @@ Measurement rrdBuffer[MAX_ENTRIES];
 int head = 0;
 int displayhead = 0;
 
-// ==== OLED ====
-SSD1306Wire  oled_display(0x3c, 500000, SDA_OLED, SCL_OLED, GEOMETRY_128_64, RST_OLED);
-
 void VextON() {
   pinMode(Vext, OUTPUT);
-  digitalWrite(Vext, LOW);  // LOW = ON
+  digitalWrite(Vext, LOW);
+}
+
+void VextOFF() {
+  pinMode(Vext, OUTPUT);
+  digitalWrite(Vext, HIGH);
 }
 
 void setup() {
@@ -57,20 +74,20 @@ void setup() {
   // Board and Display Init
   Mcu.begin(HELTEC_BOARD, SLOW_CLK_TPYE);
   pinMode(buttonPin, INPUT_PULLUP);
+  attachInterrupt(digitalPinToInterrupt(buttonPin), handleButton, FALLING);
+  lastActivityTime = millis(); // Timer starten
+
   VextON();
-  analogReadResolution(12);
-  //analogSetAttenuation();
-  pinMode(ADC_CTRL, OUTPUT);
-  digitalWrite(ADC_CTRL, !ADC_CTRL_ENABLED);
-  
-  float voltage = getBatteryVoltage();
   oled_display.init();
   oled_display.setContrast(255);
   oled_display.screenRotate(ANGLE_0_DEGREE);
   oled_display.setFont(ArialMT_Plain_10);
-  
+  for (int i = 0; i < MAX_ENTRIES; i++){
+    storeData(0, 0,  0, i, NAN, NAN, 0);
+  }
   Serial.println("LoRa RX Listening...");
-  oled_display.drawString(0, 0, "RX Listening... |Bat:" + String(voltage, 2));
+  oled_display.drawString(0, 0, "RX Listening... ");
+  battery();
   oled_display.display();
  
   // LoRa Init
@@ -85,6 +102,30 @@ void setup() {
 }
 
 void loop() {
+  if (buttonPressed) {
+    buttonPressed = false;
+    lastActivityTime = millis(); // Timer resetten
+    
+    if (!displayOn) {
+      VextON();
+      oled_display.init();
+      displayOn = true;
+    } else {
+      // Rückwärts durch den Buffer blättern
+      displayhead = (displayhead - 1 + MAX_ENTRIES) % MAX_ENTRIES;
+    }
+    updateDisplay(displayhead);
+  }
+
+  // 2. Timeout Check (Display aus nach 5 Min)
+  if (displayOn && (millis() - lastActivityTime > DISPLAY_TIMEOUT)) {
+    oled_display.clear();
+    oled_display.display();
+    // Vext ausschalten spart am Heltec Board am meisten Strom
+    VextOFF(); 
+    displayOn = false;
+  }
+
   switch (state) {
     case STATE_RX:
       Radio.Rx(0);  // Listen for packets
@@ -98,19 +139,14 @@ void loop() {
   }
 }
 
-float getBatteryVoltage() {
-  int analogVolts = analogReadMilliVolts(1);
-  return analogVolts * 490 / 100000;
-}
-
 // === OLED Display Update ===
 void updateDisplay(int myhead) {
-  float voltage = getBatteryVoltage();
   float airTempC = NAN;
   float waterTempC = NAN; 
   oled_display.clear();
   oled_display.setFont(ArialMT_Plain_10);
-  oled_display.drawString(0, 0, "Time: " + String(rrdBuffer[myhead].hour) + ":" + String(rrdBuffer[myhead].minute) + "|B: " + String(voltage, 2) +"|B: " + String(rrdBuffer[myhead].batteryVoltage, 2) + " V");
+  oled_display.drawString(0, 0, "Time: " + String(rrdBuffer[myhead].hour) + ":" + String(rrdBuffer[myhead].minute) + String(rrdBuffer[myhead].batteryVoltage, 2));
+  battery();
   oled_display.setFont(ArialMT_Plain_24);
   for (int j = 0; j < (sizeof(air_sensor_addr) / sizeof(air_sensor_addr[0])); j++) {
     if ( rrdBuffer[myhead].address1 == getshortaddr(air_sensor_addr[j]) )  {
@@ -197,6 +233,12 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr) {
   Serial.printf("Battery: %.3f V\n", batteryVoltage);
   Serial.printf("Temp1  : %s\n", isnan(temp1) ? "-127" : String(temp1, 1).c_str());
   Serial.printf("Temp2  : %s\n", isnan(temp2) ? "-127" : String(temp2, 1).c_str());
+  if (!displayOn) {
+    VextON();
+    oled_display.init();
+    displayOn = true;
+  }
+  lastActivityTime = millis();
   updateDisplay(displayhead);  
   
   state = STATE_RX;
