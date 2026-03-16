@@ -83,7 +83,7 @@ void setup() {
   oled_display.screenRotate(ANGLE_0_DEGREE);
   oled_display.setFont(ArialMT_Plain_10);
   for (int i = 0; i < MAX_ENTRIES; i++){
-    storeData(0, 0,  0, i, NAN, NAN, 0);
+    storeData(0, 0,  0, i, NAN, NAN, NAN);
   }
   Serial.println("LoRa RX Listening...");
   oled_display.drawString(0, 0, "RX Listening... ");
@@ -142,10 +142,12 @@ void loop() {
 // === OLED Display Update ===
 void updateDisplay(int myhead) {
   float airTempC = NAN;
-  float waterTempC = NAN; 
+  float waterTempC = NAN;
+  String h = (rrdBuffer[myhead].hour < 10) ? "0" + String(rrdBuffer[myhead].hour) : String(rrdBuffer[myhead].hour);
+  String m = (rrdBuffer[myhead].minute < 10) ? "0" + String(rrdBuffer[myhead].minute) : String(rrdBuffer[myhead].minute);
   oled_display.clear();
   oled_display.setFont(ArialMT_Plain_10);
-  oled_display.drawString(0, 0, "Time: " + String(rrdBuffer[myhead].hour) + ":" + String(rrdBuffer[myhead].minute) + String(rrdBuffer[myhead].batteryVoltage, 2));
+  oled_display.drawString(0, 0, "Time: " + h + ":" + m +  "|B" + String(rrdBuffer[myhead].batteryVoltage, 2));
   battery();
   oled_display.setFont(ArialMT_Plain_24);
   for (int j = 0; j < (sizeof(air_sensor_addr) / sizeof(air_sensor_addr[0])); j++) {

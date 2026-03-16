@@ -58,12 +58,10 @@ int getBatteryLevel(float voltage) {
 }
 
 void battery() {
-  analogReadResolution(12);
   pinMode(ADC_CTRL, OUTPUT);
   digitalWrite(ADC_CTRL, !ADC_CTRL_ENABLED);
-  delay(20);
-  analogRead(BATTERY_PIN); 
-  delay(10);  
+  analogReadResolution(12);
+  delay(50);
   int analogVolts = analogReadMilliVolts(BATTERY_PIN);
   float batteryVoltage = analogVolts * 490 / 100000;
   int level = getBatteryLevel(batteryVoltage);
