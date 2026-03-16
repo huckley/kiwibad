@@ -43,10 +43,11 @@ uint32_t joinStartTime = 0;
 #define PIN_EINK_RES  3
 #define PIN_EINK_MOSI 6
 
-#define SLEEP_TIME   1800        // Sleep time in secounds
-#define NIGHT_SLEEP_TIME 12       // Sleep time in the night in hours
-#define GPS_RX 43  // GPS TX -> ESP32 RX pin (GPIO 16)
-#define GPS_TX 44  // GPS RX -> ESP32 TX pin (GPIO 17)
+#define SLEEP_TIME   1800 // Sleep time in seconds
+#define WAKEUP_HOUR 8     // at which hour we wakup
+#define NIGHT_HOUR  20    // after which hour we sleep for the night
+#define GPS_RX 43 
+#define GPS_TX 44
 #define GPS_BAUD 9600
 #define GPS_TIMEOUT_MS 180000  // Max wait for GPS (3 min)
 #define TZ_INFO "CET-1CEST,M3.5.0/2,M10.5.0/3"  // Timezone string
@@ -69,7 +70,7 @@ void VextOFF(void) {
   digitalWrite(46, LOW);
 }
 
-void enterDeepSleepForSecounds(uint32_t secounds) {
+void enterDeepSleepForseconds(uint32_t seconds) {
   VextOFF();
 
   // Prepare peripherals
@@ -84,23 +85,30 @@ void enterDeepSleepForSecounds(uint32_t secounds) {
   pinMode(LORA_MISO, ANALOG);
   pinMode(LORA_MOSI, ANALOG);
 
-  struct timeval now;
-  gettimeofday(&now, nullptr);         // get current system time
-  epoch_base = (int64_t)now.tv_sec + secounds ;    // save seconds part to RTC memory
-  time_t tnow = now.tv_sec;
-  struct tm *timeinfo = localtime(&tnow);
-  int current_hour = timeinfo->tm_hour;
-  if (current_hour > 20) {
+  struct timeval tv_now;
+  gettimeofday(&tv_now, nullptr);  // get current system time
+  time_t now = tv_now.tv_sec;
+  struct tm *timeinfo = localtime(&now);
+
+  epoch_base = (int64_t)now + seconds ;    // save seconds part to RTC memory
+  if (timeinfo->tm_hour > NIGHT_HOUR) {
+    struct tm target_tm = *timeinfo;
+    target_tm.tm_hour = WAKEUP_HOUR;
+    target_tm.tm_min = (sensorIDs[0]+sensorIDs[1]) % 60;
+    target_tm.tm_sec = esp_random() % 60;
+    
+    time_t target_time = mktime(&target_tm);
+    if (target_time <= now) {
+      target_time += 24 * 3600;
+    }
+    seconds = (uint64_t)(target_time - now);
     epoch_base = 0;
-    secounds = NIGHT_SLEEP_TIME*3600;
   }
   Serial.printf("Wakeup time to RTC: %lld\n", epoch_base);
-  Serial.printf("going to sleep for %u sec...\n", secounds);
-  // Enable wake-up timer
+  Serial.printf("going to sleep for %u sec...\n", seconds);
   Serial.flush();
   // send_on_lora = !send_on_lora;
-  esp_sleep_enable_timer_wakeup((uint64_t)secounds  * 1000000ULL);
-  // Enter deep sleep
+  esp_sleep_enable_timer_wakeup((uint64_t)seconds  * 1000000ULL);
   esp_deep_sleep_start();
 }
 
@@ -371,14 +379,14 @@ void loop() {
       }
       case DEVICE_STATE_CYCLE: {
         Serial.println("LoraWAN cycle");
-        enterDeepSleepForSecounds(SLEEP_TIME);
+        enterDeepSleepForseconds(SLEEP_TIME);
         deviceState = DEVICE_STATE_SLEEP;
         break;
       }
       case DEVICE_STATE_SLEEP: {
         LoRaWAN.sleep(loraWanClass);
         if (millis() - joinStartTime >= JOIN_TIMEOUT) {
-          enterDeepSleepForSecounds(SLEEP_TIME);
+          enterDeepSleepForseconds(SLEEP_TIME);
         }
         break;
       }
@@ -393,10 +401,10 @@ void loop() {
 
 void OnTxDone(void) {
   Serial.println("txdone");
-  enterDeepSleepForSecounds(SLEEP_TIME);
+  enterDeepSleepForseconds(SLEEP_TIME);
 }
 
 void OnTxTimeout(void) {
   Serial.println("txtimeout");
-  enterDeepSleepForSecounds(SLEEP_TIME);
+  enterDeepSleepForseconds(SLEEP_TIME);
 }
