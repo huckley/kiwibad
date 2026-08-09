@@ -1,4 +1,6 @@
-## Parts
+# Temperatur Messung im Kiwibad
+misst aller halben Stunde die Temperatur und versendet sie via LoRa
+## Teile
 ### Sender 
 * Vision Master E213
 * [GT-U7 GPS-Modul](https://de.aliexpress.com/item/1005001713388717.html)
