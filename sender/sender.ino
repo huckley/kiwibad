@@ -177,6 +177,7 @@ void Navigation_bar(float airtempC) {
   String line_one = "Luft: " + String(airtempC, 1) + "°C | " + buffer;
   Serial.println(line_one);
   epaper_display->drawString(0, 0, line_one);
+  epaper_display->drawString(0, 111, url);
   battery();
 }
 
@@ -275,7 +276,7 @@ void setup() {
   esp_wifi_deinit();
 
   flash_led();
-  Serial.println("init >>> ");
+  Serial.println(url);
   init_display();
 #if(LORAWAN_DEVEUI_AUTO)
   LoRaWAN.generateDeveuiByChipID();
@@ -296,8 +297,10 @@ void setup() {
       printAddress(sensorAddresses[i]);
       Serial.print(" Temp: ");
       float tempC = sensors.getTempCByIndex(i);
-      Serial.println(tempC);
+      Serial.print(tempC);
       sensorIDs[i] = getshortaddr(sensorAddresses[i]);
+      Serial.print(" ID: ");
+      Serial.println(sensorIDs[i]);
       temps[i] = tempC;
       for (int j = 0; j < (sizeof(air_sensor_addr) / sizeof(air_sensor_addr[0])); j++) {
         if (memcmp(air_sensor_addr[j], sensorAddresses[i], 8) == 0) {
@@ -372,7 +375,6 @@ void loop() {
       }
       case DEVICE_STATE_SEND: {
           Serial.println("LoraWAN send");
-          prepareTxFrame(appPort, airTempC, waterTempC, batteryVoltage);
           LoRaWAN.send();
           deviceState = DEVICE_STATE_CYCLE;
           break;

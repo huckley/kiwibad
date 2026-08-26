@@ -4,6 +4,7 @@
 #define PAYLOAD_LEN 14
 #define SIG_LEN 4
 #define MSG_LEN 10
+String url = "github.com/huckley/kiwibad";
 
 /* OTAA para*/
 uint8_t devEui[8] = { 0xDE, 0xAD, 0xBE, 0xEF, 0x12, 0x34, 0x56, 0x78 };  // example

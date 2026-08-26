@@ -47,7 +47,7 @@ struct Measurement {
   float batteryVoltage; 
 };
 
-const int MAX_ENTRIES = 5;
+const int MAX_ENTRIES = 24;
 Measurement rrdBuffer[MAX_ENTRIES];
 int head = 0;
 int displayhead = 0;
@@ -85,9 +85,11 @@ void setup() {
   for (int i = 0; i < MAX_ENTRIES; i++){
     storeData(0, 0,  0, i, NAN, NAN, NAN);
   }
+  Serial.println(url);
   Serial.println("LoRa RX Listening...");
   oled_display.drawString(0, 0, "RX Listening... ");
   battery();
+  oled_display.drawString(0, 53, url);
   oled_display.display();
  
   // LoRa Init
@@ -118,6 +120,7 @@ void loop() {
   }
 
   // 2. Timeout Check (Display aus nach 5 Min)
+ /*
   if (displayOn && (millis() - lastActivityTime > DISPLAY_TIMEOUT)) {
     oled_display.clear();
     oled_display.display();
@@ -125,7 +128,7 @@ void loop() {
     VextOFF(); 
     displayOn = false;
   }
-
+*/
   switch (state) {
     case STATE_RX:
       Radio.Rx(0);  // Listen for packets
@@ -147,7 +150,7 @@ void updateDisplay(int myhead) {
   String m = (rrdBuffer[myhead].minute < 10) ? "0" + String(rrdBuffer[myhead].minute) : String(rrdBuffer[myhead].minute);
   oled_display.clear();
   oled_display.setFont(ArialMT_Plain_10);
-  oled_display.drawString(0, 0, "Time: " + h + ":" + m +  "|B" + String(rrdBuffer[myhead].batteryVoltage, 2));
+  oled_display.drawString(0, 0, "Time: " + h + ":" + m + "|" + rrdBuffer[myhead].address1 + rrdBuffer[myhead].address2);
   battery();
   oled_display.setFont(ArialMT_Plain_24);
   for (int j = 0; j < (sizeof(air_sensor_addr) / sizeof(air_sensor_addr[0])); j++) {

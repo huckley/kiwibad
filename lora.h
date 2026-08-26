@@ -51,23 +51,6 @@ uint16_t encodeTemp(float temp) {
   return constrain((int16_t)((temp + 40.0f) * 10.0f), 0, 1250);
 }
 
-static void prepareTxFrame(uint8_t port, float airTemp, float waterTemp, float batteryVoltage) {
-  uint16_t airTempInt = encodeTemp(airTemp);
-  uint16_t waterTempInt = encodeTemp(waterTemp);
-  uint16_t battVoltInt = (uint16_t)(batteryVoltage * 1000);  // 2 bytes
-
-  appDataSize = 6;  // 2 + 2 + 2 = 6 bytes
-
-  appData[0] = (battVoltInt >> 8) & 0xFF;
-  appData[1] = battVoltInt & 0xFF;
-
-  appData[2] = (airTempInt >> 8) & 0xFF;
-  appData[3] = airTempInt & 0xFF;
-
-  appData[4] = (waterTempInt >> 8) & 0xFF;
-  appData[5] = waterTempInt & 0xFF;
-}
-
 void sendLoRaWithTempsAndBattery( uint8_t* sensorIDs, float* temps, float batteryVoltage) {
   uint16_t TempInt[2]; 
   TempInt[0] = encodeTemp(temps[0]);
