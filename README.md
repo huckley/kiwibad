@@ -15,6 +15,7 @@ misst aller halben Stunde die Temperatur und versendet sie via LoRa
 ## Build instructions
 
 arduino with
-
+* version 2.1.5 of https://github.com/HelTecAutomation/Heltec_ESP32
+* https://github.com/Heltec-Aaron-Lee/WiFi_Kit_series [last one has bug](https://github.com/Heltec-Aaron-Lee/WiFi_Kit_series/issues/296)
 * Vision Master E213 (sender)
 * Heltec WiFi LoRa 32(V3) (reciver)
