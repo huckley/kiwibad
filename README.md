@@ -1,6 +1,5 @@
 # Temperatur Messung im Kiwibad
 misst aller halben Stunde die Temperatur und versendet sie via LoRa, export der historischen Daten via BLE ans Smartphone über [phyphox](https://phyphox.org/)
-## Teile
 ### Sender 
 * Vision Master E213
 * [GT-U7 GPS-Modul](https://de.aliexpress.com/item/1005001713388717.html)
@@ -13,7 +12,7 @@ misst aller halben Stunde die Temperatur und versendet sie via LoRa, export der 
 * [DS18B20 1m](https://de.aliexpress.com/item/1005006090368473.html)
 ### Empfänger
 * Heltec WiFi LoRa 32(V3)
-
+* acos-ht4 3dprints are copys from https://www.printables.com/model/1519914-heltec-lora-32-v4v3-pocket-pager-case [CC BY-SA 4.0.]( https://creativecommons.org/licenses/by-sa/4.0/) [@AlleyCat](https://www.printables.com/@AlleyCat)
 
 ## Export der historischen Daten am Empfänger
 1. [App installieren](https://phyphox.org/)
