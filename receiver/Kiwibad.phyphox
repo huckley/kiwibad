@@ -1,0 +1,146 @@
+<phyphox version="1.7">
+    <title>Kiwibad Temperatur</title>
+    <category>Kiwibad</category>
+    <color>ff8000</color>
+    <description>
+        Luft- und Wassertemperatur (je 2 Sensoren) sowie Batteriespannung aus
+        dem Kiwibad, per LoRa empfangen. Der Receiver liefert dieses
+        Experiment automatisch per Bluetooth mit - kein manuelles Laden
+        einer Datei noetig, einfach im Bluetooth-Scan antippen.
+        Zeigt zuerst die gespeicherte Historie, danach
+        neue Messungen live.
+        X-Achse: Uhrzeit in Dezimalstunden (z.B. 8.5 = 08:30 Uhr).
+        Ein Sensor, der noch nie gemeldet wurde, liefert -127°C (dieselbe
+        Fehlerkonvention wie beim DS18B20-Sensor selbst) - diese Punkte
+        werden in den Graphen per Filter entfernt (echte Luecke statt
+        Ausreisser).
+    </description>
+
+    <data-containers>
+        <container size="500">recordTimeHours</container>
+        <container size="500">air1Temp</container>
+        <container size="500">air2Temp</container>
+        <container size="500">water1Temp</container>
+        <container size="500">water2Temp</container>
+        <container size="500">batteryMilliVolts</container>
+        <container size="500">air1TempF</container>
+        <container size="500">air1TimeF</container>
+        <container size="500">air2TempF</container>
+        <container size="500">air2TimeF</container>
+        <container size="500">water1TempF</container>
+        <container size="500">water1TimeF</container>
+        <container size="500">water2TempF</container>
+        <container size="500">water2TimeF</container>
+    </data-containers>
+
+    <input>
+        <bluetooth name="Kiwibad" uuid="cddf0001-30f7-4671-8b43-5e40ba53514a" id="kiwibad" autoConnect="true" mode="notification" subscribeOnStart="false">
+            <output char="6b6a0002-1c7c-4d69-9d2b-3a2e6f9a1000" conversion="float32LittleEndian" offset="0" size="4">recordTimeHours</output>
+            <output char="6b6a0002-1c7c-4d69-9d2b-3a2e6f9a1000" conversion="int8" offset="4" size="1">air1Temp</output>
+            <output char="6b6a0002-1c7c-4d69-9d2b-3a2e6f9a1000" conversion="int8" offset="5" size="1">air2Temp</output>
+            <output char="6b6a0002-1c7c-4d69-9d2b-3a2e6f9a1000" conversion="int8" offset="6" size="1">water1Temp</output>
+            <output char="6b6a0002-1c7c-4d69-9d2b-3a2e6f9a1000" conversion="int8" offset="7" size="1">water2Temp</output>
+            <output char="6b6a0002-1c7c-4d69-9d2b-3a2e6f9a1000" conversion="uInt16LittleEndian" offset="8" size="2">batteryMilliVolts</output>
+        </bluetooth>
+    </input>
+
+    <analysis>
+        <rangefilter>
+            <input clear="false">air1Temp</input>
+            <input as="min" type="value">-50</input>
+            <input as="max" type="value">100</input>
+            <input clear="false">recordTimeHours</input>
+            <output>air1TempF</output>
+            <output>air1TimeF</output>
+        </rangefilter>
+        <rangefilter>
+            <input clear="false">air2Temp</input>
+            <input as="min" type="value">-50</input>
+            <input as="max" type="value">100</input>
+            <input clear="false">recordTimeHours</input>
+            <output>air2TempF</output>
+            <output>air2TimeF</output>
+        </rangefilter>
+        <rangefilter>
+            <input clear="false">water1Temp</input>
+            <input as="min" type="value">-50</input>
+            <input as="max" type="value">100</input>
+            <input clear="false">recordTimeHours</input>
+            <output>water1TempF</output>
+            <output>water1TimeF</output>
+        </rangefilter>
+        <rangefilter>
+            <input clear="false">water2Temp</input>
+            <input as="min" type="value">-50</input>
+            <input as="max" type="value">100</input>
+            <input clear="false">recordTimeHours</input>
+            <output>water2TempF</output>
+            <output>water2TimeF</output>
+        </rangefilter>
+    </analysis>
+
+    <views>
+        <view label="Temperaturverlauf">
+            <value label="Uhrzeit" unit="h" precision="2">
+                <input>recordTimeHours</input>
+            </value>
+            <value label="Luft 1" unit="°C" precision="0" color="ff8000">
+                <input>air1Temp</input>
+            </value>
+            <value label="Luft 2" unit="°C" precision="0" color="ffc080">
+                <input>air2Temp</input>
+            </value>
+            <value label="Wasser 1" unit="°C" precision="0" color="0080ff">
+                <input>water1Temp</input>
+            </value>
+            <value label="Wasser 2" unit="°C" precision="0" color="80c0ff">
+                <input>water2Temp</input>
+            </value>
+            <value label="Batteriespannung" unit="mV" precision="0">
+                <input>batteryMilliVolts</input>
+            </value>
+
+            <separator height="1" />
+
+            <graph label="Lufttemperatur" labelX="Uhrzeit (h)" labelY="Temperatur" unitY="°C" partialUpdate="true" style="dots">
+                <input axis="x" color="ff8000">air1TimeF</input>
+                <input axis="y" color="ff8000">air1TempF</input>
+                <input axis="x" color="ffc080">air2TimeF</input>
+                <input axis="y" color="ffc080">air2TempF</input>
+            </graph>
+
+            <graph label="Wassertemperatur" labelX="Uhrzeit (h)" labelY="Temperatur" unitY="°C" partialUpdate="true" style="dots">
+                <input axis="x" color="0080ff">water1TimeF</input>
+                <input axis="y" color="0080ff">water1TempF</input>
+                <input axis="x" color="80c0ff">water2TimeF</input>
+                <input axis="y" color="80c0ff">water2TempF</input>
+            </graph>
+
+            <graph label="Batteriespannung" labelX="Uhrzeit (h)" labelY="Spannung" unitY="mV" partialUpdate="true" style="dots">
+                <input axis="x">recordTimeHours</input>
+                <input axis="y">batteryMilliVolts</input>
+            </graph>
+        </view>
+    </views>
+
+    <export>
+        <set name="Kiwibad Messwerte (roh, inkl. -127 = kein Wert)">
+            <data name="Uhrzeit (Dezimalstunden)">recordTimeHours</data>
+            <data name="Lufttemperatur 1 (°C)">air1Temp</data>
+            <data name="Lufttemperatur 2 (°C)">air2Temp</data>
+            <data name="Wassertemperatur 1 (°C)">water1Temp</data>
+            <data name="Wassertemperatur 2 (°C)">water2Temp</data>
+            <data name="Batteriespannung (mV)">batteryMilliVolts</data>
+        </set>
+        <set name="Kiwibad Messwerte (gefiltert)">
+            <data name="Luft 1 - Uhrzeit">air1TimeF</data>
+            <data name="Luft 1 - Temperatur (°C)">air1TempF</data>
+            <data name="Luft 2 - Uhrzeit">air2TimeF</data>
+            <data name="Luft 2 - Temperatur (°C)">air2TempF</data>
+            <data name="Wasser 1 - Uhrzeit">water1TimeF</data>
+            <data name="Wasser 1 - Temperatur (°C)">water1TempF</data>
+            <data name="Wasser 2 - Uhrzeit">water2TimeF</data>
+            <data name="Wasser 2 - Temperatur (°C)">water2TempF</data>
+        </set>
+    </export>
+</phyphox>

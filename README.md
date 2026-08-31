@@ -1,5 +1,5 @@
 # Temperatur Messung im Kiwibad
-misst aller halben Stunde die Temperatur und versendet sie via LoRa
+misst aller halben Stunde die Temperatur und versendet sie via LoRa, export der historischen Daten via BLE ans Smartphone über [phyphox](https://phyphox.org/)
 ## Teile
 ### Sender 
 * Vision Master E213
@@ -11,11 +11,21 @@ misst aller halben Stunde die Temperatur und versendet sie via LoRa
 * [4 18650 Parallele Batteriebox](https://de.aliexpress.com/item/1005001955162216.html)
 * [DS18B20 10m](https://de.aliexpress.com/item/1005006090368473.html)
 * [DS18B20 1m](https://de.aliexpress.com/item/1005006090368473.html)
+### Empfänger
+* Heltec WiFi LoRa 32(V3)
+
+
+## Export der historischen Daten am Empfänger
+1. [App installieren](https://phyphox.org/)
+2. Oben rechts das Plus-Symbol
+3. Neues Experiment für Bluetooth-Gerät
+4. Kiwibad auswählen
+5. auf den Playbutton drücken
 
 ## Build instructions
 
 arduino with
 * version 2.1.5 of https://github.com/HelTecAutomation/Heltec_ESP32
-* https://github.com/Heltec-Aaron-Lee/WiFi_Kit_series [last one has bug](https://github.com/Heltec-Aaron-Lee/WiFi_Kit_series/issues/296)
+* https://github.com/Heltec-Aaron-Lee/WiFi_Kit_series [last version has bug](https://github.com/Heltec-Aaron-Lee/WiFi_Kit_series/issues/296)
 * Vision Master E213 (sender)
-* Heltec WiFi LoRa 32(V3) (reciver)
+* Heltec WiFi LoRa 32(V3) (receiver)
