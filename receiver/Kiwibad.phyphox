@@ -102,21 +102,21 @@
 
             <separator height="1" />
 
-            <graph label="Lufttemperatur" labelX="Uhrzeit (h)" labelY="Temperatur" unitY="°C" partialUpdate="true" style="dots">
+            <graph label="Lufttemperatur" labelX="Uhrzeit (h)" labelY="Temperatur" unitY="°C" partialUpdate="true">
                 <input axis="x" color="ff8000">air1TimeF</input>
                 <input axis="y" color="ff8000">air1TempF</input>
                 <input axis="x" color="ffc080">air2TimeF</input>
                 <input axis="y" color="ffc080">air2TempF</input>
             </graph>
 
-            <graph label="Wassertemperatur" labelX="Uhrzeit (h)" labelY="Temperatur" unitY="°C" partialUpdate="true" style="dots">
+            <graph label="Wassertemperatur" labelX="Uhrzeit (h)" labelY="Temperatur" unitY="°C" partialUpdate="true">
                 <input axis="x" color="0080ff">water1TimeF</input>
                 <input axis="y" color="0080ff">water1TempF</input>
                 <input axis="x" color="80c0ff">water2TimeF</input>
                 <input axis="y" color="80c0ff">water2TempF</input>
             </graph>
 
-            <graph label="Batteriespannung" labelX="Uhrzeit (h)" labelY="Spannung" unitY="mV" partialUpdate="true" style="dots">
+            <graph label="Batteriespannung" labelX="Uhrzeit (h)" labelY="Spannung" unitY="mV" partialUpdate="true">
                 <input axis="x">recordTimeHours</input>
                 <input axis="y">batteryMilliVolts</input>
             </graph>
